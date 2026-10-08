@@ -1,6 +1,10 @@
+using Exchange.Api.Logging;
+using Exchange.Api.Tests.Logging;
 using Exchange.Api.Tests.Settings;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Exchange.Api.Tests;
 
@@ -8,9 +12,17 @@ namespace Exchange.Api.Tests;
 public class TestAppFactory : WebApplicationFactory<Program>
 {
     private readonly Dictionary<string, string?> _environment;
+    private readonly CapturingSink? _logs;
 
-    /// <summary>A factory with the given environment; a key mapped to null is left unset.</summary>
-    public TestAppFactory(Dictionary<string, string?> environment) => _environment = environment;
+    /// <summary>
+    /// A factory with the given environment (a key mapped to null is left unset); when
+    /// <paramref name="logs"/> is given, the app's log output goes there, still behind redaction.
+    /// </summary>
+    public TestAppFactory(Dictionary<string, string?> environment, CapturingSink? logs = null)
+    {
+        _environment = environment;
+        _logs = logs;
+    }
 
     /// <inheritdoc />
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -19,6 +31,11 @@ public class TestAppFactory : WebApplicationFactory<Program>
         foreach (var (key, value) in _environment)
         {
             builder.UseSetting(key, value);
+        }
+
+        if (_logs is not null)
+        {
+            builder.ConfigureTestServices(services => services.AddSingleton(new LogOutput(_logs)));
         }
     }
 }

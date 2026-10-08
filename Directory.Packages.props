@@ -11,12 +11,20 @@
     <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
   </PropertyGroup>
 
+  <ItemGroup Label="Logging (spec 4)">
+    <!-- Brings Serilog 4.3.0, Sinks.Console 6.1.1, Sinks.File 7.0.0, Formatting.Compact 3.0.0;
+         its net10.0 group references no Microsoft.AspNetCore package (INV-20). -->
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Tests">
     <!-- xunit.v3 runs on Microsoft.Testing.Platform (global.json). Microsoft.NET.Test.Sdk and
          xunit.runner.visualstudio are the VSTest path and are forbidden (spec 6.2, D-009). -->
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <!-- FakeTimeProvider for cooldowns and freshness windows (spec 6, Clock row). -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
   </ItemGroup>
 
   <!-- Forbidden, do not add (spec 6.2): FluentAssertions, MediatR, AutoMapper, Moq,
