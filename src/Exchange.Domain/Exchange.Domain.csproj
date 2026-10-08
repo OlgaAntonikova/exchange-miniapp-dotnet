@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure domain: no I/O, no EF, no ASP.NET, no package references (spec 6.1, D-006). -->
+  <PropertyGroup>
+    <RootNamespace>Exchange.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

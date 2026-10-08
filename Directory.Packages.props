@@ -1,0 +1,27 @@
+<Project>
+
+  <!-- Central Package Management: every NuGet version in the solution lives here and nowhere
+       else (RULE-DEPENDENCIES). Microsoft ASP.NET Core and EF Core packages are pinned to the
+       installed runtime, 10.0.11, not the newest patch (spec 6.2, D-001); DependencyContractTests
+       checks the resolved versions (INV-20). -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- No project may override a central version (RULE-DEPENDENCIES); NuGet refuses
+         VersionOverride everywhere. -->
+    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Tests">
+    <!-- xunit.v3 runs on Microsoft.Testing.Platform (global.json). Microsoft.NET.Test.Sdk and
+         xunit.runner.visualstudio are the VSTest path and are forbidden (spec 6.2, D-009). -->
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- Forbidden, do not add (spec 6.2): FluentAssertions, MediatR, AutoMapper, Moq,
+       Newtonsoft.Json (except transitively through Microsoft.EntityFrameworkCore.Design), Polly,
+       Microsoft.Extensions.Http.Resilience, Telegram.Bot, Swashbuckle.*, Microsoft.NET.Test.Sdk,
+       xunit.runner.visualstudio. DependencyContractTests enforces the list (INV-20). -->
+
+</Project>
