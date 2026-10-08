@@ -20,8 +20,9 @@
   </ItemGroup>
 
   <!-- Forbidden, do not add (spec 6.2): FluentAssertions, MediatR, AutoMapper, Moq,
-       Newtonsoft.Json (except transitively through Microsoft.EntityFrameworkCore.Design), Polly,
-       Microsoft.Extensions.Http.Resilience, Telegram.Bot, Swashbuckle.*, Microsoft.NET.Test.Sdk,
+       Newtonsoft.Json (except when reached only through Microsoft.EntityFrameworkCore.Design),
+       Polly and Polly.*, Microsoft.Extensions.Resilience, Microsoft.Extensions.Http.Resilience,
+       Telegram.Bot, any OpenAPI UI (Swashbuckle.*, NSwag.*, Scalar.*), Microsoft.NET.Test.Sdk,
        xunit.runner.visualstudio. DependencyContractTests enforces the list (INV-20). -->
 
 </Project>
