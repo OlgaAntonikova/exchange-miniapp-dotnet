@@ -180,6 +180,8 @@ internal static partial class DependencyContract
         return seen;
     }
 
-    [GeneratedRegex(@"\bConsole\b")]
+    // System.Console in any spelling; or Console followed by a member, unless Console is itself a
+    // member (LogFormat.Console); or `using static Console`.
+    [GeneratedRegex(@"\bSystem\s*\.\s*Console\b|(?<![.\w])Console\s*\.|\busing\s+static\s+Console\b")]
     private static partial Regex ConsolePattern();
 }

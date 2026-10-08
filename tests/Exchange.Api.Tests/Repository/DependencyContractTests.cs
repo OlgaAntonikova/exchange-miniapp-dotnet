@@ -185,6 +185,8 @@ public sealed class DependencyContractTests
     [InlineData("Console .Error.WriteLine(x);")]
     [InlineData("using static System.Console;")]
     [InlineData("using Terminal = System.Console;")]
+    [InlineData("global::System.Console.WriteLine(x);")]
+    [InlineData("using static Console;")]
     public void Console_output_outside_the_logging_setup_is_reported(string line)
     {
         DependencyContract.ConsoleUses("src/Exchange.Api/Orders/Thing.cs", line).Count.ShouldBe(1);
@@ -196,6 +198,8 @@ public sealed class DependencyContractTests
     [Theory]
     [InlineData("builder.Logging.AddConsole();")]
     [InlineData("var consoleWidth = 80;")]
+    [InlineData("return LogFormat.Console;")]
+    [InlineData("return Settings.LogFormat.Console;")]
     public void Names_that_merely_contain_console_are_not_reported(string line)
     {
         DependencyContract.ConsoleUses("src/Exchange.Api/Orders/Thing.cs", line).ShouldBeEmpty();

@@ -1,15 +1,14 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Shouldly;
 
 namespace Exchange.Api.Tests;
 
 /// <summary>Spec 1.10: <c>GET /healthz</c> answers 200 <c>{"status": "ok"}</c>.</summary>
-public sealed class HealthzTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class HealthzTests : IClassFixture<DefaultAppFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly DefaultAppFactory _factory;
 
-    public HealthzTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public HealthzTests(DefaultAppFactory factory) => _factory = factory;
 
     [Fact]
     public async Task Healthz_answers_ok()

@@ -438,7 +438,7 @@ Fixed; do not substitute. The SDK and runtime are on the owner's machine already
 | Runtime | ASP.NET Core / .NET (LTS) | 10.0.11 |
 | Web | ASP.NET Core Minimal APIs with route groups; `System.Text.Json` | in-box |
 | Data | PostgreSQL; EF Core with Npgsql; EF Core migrations | PostgreSQL 16 (an exact `postgres:16.x-alpine` tag fixed in `PHASE-0` against Docker Hub and used by compose and Testcontainers alike); `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` 10.0.11, referenced **explicitly** (Npgsql's range `[10.0.4, 11.0.0)` would otherwise resolve 10.0.4 wherever the design package is absent); `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3; `Microsoft.EntityFrameworkCore.Design` 10.0.11 (`PrivateAssets=all`); `dotnet-ef` local tool 10.0.11 |
-| Settings | Options pattern bound from the environment variables of section 1.11, `ValidateOnStart` with hand-written validators | in-box |
+| Settings | One typed settings object loaded and validated once at startup from the environment variables of section 1.11 by a hand-written loader that reports every problem at once (`D-018`; amended 2026-10-08 from the Options pattern with `ValidateOnStart`) | in-box |
 | HTTP out | `IHttpClientFactory` typed clients; retries hand-written | in-box |
 | Auth | `Microsoft.AspNetCore.Authentication.JwtBearer` - HS256, `JWT_TTL_SECONDS` tokens, re-issued silently from `initData`; `initData` HMAC with `HMACSHA256` and `CryptographicOperations.FixedTimeEquals` | 10.0.11 |
 | Crypto | `System.Security.Cryptography.AesGcm` (PII), `RandomNumberGenerator` (demo keys) | in-box |

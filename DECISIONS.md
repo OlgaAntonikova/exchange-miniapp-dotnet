@@ -108,3 +108,41 @@ up the machine's culture by accident - a Russian-locale machine would otherwise 
 on build with it. Test members would then each need an XML comment (`CS1591`); test names are
 written as sentences and are their own documentation, so the test projects suppress `CS1591`
 alone, with the reason beside the suppression (`RULE-BUILD-HYGIENE`).
+
+### D-016 - `DATABASE_URL` accepts one query parameter, `sslmode`
+
+Spec 1.9 has demo mode refuse a password in the URL's query, and a production database may need
+TLS. The converter therefore understands exactly one parameter, `sslmode` (`disable`, `prefer`,
+`require`, `verify-ca`, `verify-full`), given at most once, and refuses any other - `password`
+and `passfile` included - in every environment, not only in demo. For the same reason demo mode
+refuses `PGPASSFILE` beside `PGPASSWORD`; a default `~/.pgpass` cannot be seen from the
+settings, and the demo's database trusts its network and needs none. A setting the app does not understand is a
+setting it cannot be trusted to apply.
+
+### D-017 - `.env` is read in development only, below the process environment
+
+Spec 1.11 reads `.env` in development. `APP_ENV` is read once, from the process environment
+only, and that one value decides ASP.NET Core's environment, whether `.env` is read and the
+settings rules; the loader never reads it from configuration, and a `.env` that sets it is
+refused, so neither a `.env` nor a command-line argument can switch an installation's mode. It
+takes exactly `development`, `test`, `production` or `demo` (`Enum.TryParse` would accept
+`test,production` as a bit-or). `.env` is looked for in the working directory, and its pairs are
+the lowest-priority configuration source: a variable set in the process wins. A malformed line
+stops the start with its line number only, since the line may hold a secret. The test process
+runs with `APP_ENV=test`; tests that need another value switch it inside one collection that
+xUnit runs alone.
+
+### D-018 - Settings are validated after the host is built, and the listening address is an IP
+
+This replaces the Options pattern with `ValidateOnStart` that spec 6 first named (the spec row is
+amended). The settings are not independent sections to bind: demo mode changes which of them are
+required and which are refused, the order limits are checked against each other, and every
+problem has to be reported at once, by name and without its value. A binder plus per-option
+validators would split those rules across types and report them one type at a time. A single
+loader keeps them in one place and testable as a pure function.
+
+`SettingsLoader` runs as the factory of the `AppSettings` singleton, resolved right after
+`Build()` and before the app serves: it then reads the final configuration, the one tests also
+override, and every problem is reported in one exception. Kestrel takes its address from the same
+object, so `SERVE_HOST` must be an IP address or `localhost`; a host name would need a DNS lookup
+at start and is refused.
