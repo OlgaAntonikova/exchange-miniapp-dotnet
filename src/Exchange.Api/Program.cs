@@ -1,7 +1,9 @@
 using System.Net;
 using Exchange.Api.Alerts;
 using Exchange.Api.Data;
+using Exchange.Api.Json;
 using Exchange.Api.Logging;
+using Exchange.Api.Reference;
 using Exchange.Api.Settings;
 using Serilog;
 
@@ -50,6 +52,7 @@ try
     }
 
     builder.Services.AddExchangeData();
+    builder.Services.ConfigureHttpJsonOptions(options => ApiJson.Configure(options.SerializerOptions));
     builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddSingleton(services =>
     {
@@ -97,6 +100,7 @@ try
 
     app.UseRequestLogging();
     app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+    app.MapReferenceEndpoints();
 
     await app.RunAsync().ConfigureAwait(false);
     return ExitSuccess;

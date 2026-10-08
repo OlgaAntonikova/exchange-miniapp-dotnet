@@ -1,0 +1,161 @@
+using System.Net;
+using System.Text.Json;
+using Exchange.Api.Tests.Data;
+using Exchange.Api.Tests.Settings;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Shouldly;
+
+namespace Exchange.Api.Tests;
+
+/// <summary>
+/// INV-17: every row of the API table of spec 1.10 is served with its method, path, success status
+/// and response property names and JSON types. Rows not yet built are listed as pending, and the
+/// list can only shrink: a pending route must not be mapped, a mapped route must be in the table,
+/// and the list is empty at the PHASE-5 gate.
+/// </summary>
+public sealed class ApiContractTests(PostgresFixture database)
+{
+    private static readonly Dictionary<string, JsonValueKind> HealthShape = new() { ["status"] = JsonValueKind.String };
+
+    private static readonly Dictionary<string, JsonValueKind> CityShape = new()
+    {
+        ["id"] = JsonValueKind.Number,
+        ["name"] = JsonValueKind.String,
+        ["markup_percent"] = JsonValueKind.String,
+    };
+
+    private static readonly Dictionary<string, JsonValueKind> BankShape = new()
+    {
+        ["id"] = JsonValueKind.Number,
+        ["code"] = JsonValueKind.String,
+        ["channel"] = JsonValueKind.String,
+        ["currency"] = JsonValueKind.String,
+        ["country"] = JsonValueKind.String,
+        ["markup_percent"] = JsonValueKind.String,
+    };
+
+    private static readonly Dictionary<string, JsonValueKind> NetworkShape = new()
+    {
+        ["id"] = JsonValueKind.Number,
+        ["code"] = JsonValueKind.String,
+        ["fee_percent"] = JsonValueKind.String,
+    };
+
+    private static readonly Dictionary<string, JsonValueKind> DirectionShape = new()
+    {
+        ["give"] = JsonValueKind.String,
+        ["receive"] = JsonValueKind.String,
+        ["quote_fields"] = JsonValueKind.Array,
+        ["order_fields"] = JsonValueKind.Array,
+        ["optional_fields"] = JsonValueKind.Array,
+    };
+
+    // Spec 1.10, row by row: method, route template, the example path requested, success status,
+    // whether the body is a list, and the shape of one object (null: not built yet).
+    private static readonly List<(string Method, string Route, string Path, HttpStatusCode Status, bool IsList, Dictionary<string, JsonValueKind>? Shape)> Table =
+    [
+        ("GET", "/healthz", "/healthz", HttpStatusCode.OK, false, HealthShape),
+        ("GET", "/api/cities", "/api/cities", HttpStatusCode.OK, true, CityShape),
+        ("GET", "/api/banks", "/api/banks", HttpStatusCode.OK, true, BankShape),
+        ("GET", "/api/usdt-networks", "/api/usdt-networks", HttpStatusCode.OK, true, NetworkShape),
+        ("GET", "/api/directions", "/api/directions", HttpStatusCode.OK, true, DirectionShape),
+        ("POST", "/api/auth/telegram", "/api/auth/telegram", HttpStatusCode.OK, false, null),
+        ("POST", "/api/auth/demo", "/api/auth/demo", HttpStatusCode.OK, false, null),
+        ("GET", "/api/users/me", "/api/users/me", HttpStatusCode.OK, false, null),
+        ("POST", "/api/rate", "/api/rate", HttpStatusCode.OK, false, null),
+        ("POST", "/api/orders", "/api/orders", HttpStatusCode.Created, false, null),
+        ("GET", "/api/orders", "/api/orders", HttpStatusCode.OK, true, null),
+        ("GET", "/api/orders/{order_id}", "/api/orders/1", HttpStatusCode.OK, false, null),
+        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", HttpStatusCode.OK, false, null),
+        ("POST", "/api/bot/webhook", "/api/bot/webhook", HttpStatusCode.OK, false, null),
+    ];
+
+    public static TheoryData<string, string> Built() =>
+        [.. Table.Where(row => row.Shape is not null).Select(row => (row.Method, row.Route))];
+
+    public static TheoryData<string, string> Pending() =>
+        [.. Table.Where(row => row.Shape is null).Select(row => (row.Method, row.Route))];
+
+    [Theory]
+    [MemberData(nameof(Built))]
+    public async Task A_built_row_answers_with_its_status_and_shape(string method, string route)
+    {
+        var row = Table.Single(r => r.Method == method && r.Route == route);
+        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var client = factory.CreateClient();
+
+        using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(row.Status);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var objects = row.IsList ? [.. document.RootElement.EnumerateArray()] : new List<JsonElement> { document.RootElement };
+        objects.ShouldNotBeEmpty();
+        foreach (var item in objects)
+        {
+            item.ValueKind.ShouldBe(JsonValueKind.Object);
+            item.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.ValueKind).ShouldBe(row.Shape!, ignoreOrder: true);
+            foreach (var list in item.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Array))
+            {
+                list.Value.EnumerateArray().ShouldAllBe(element => element.ValueKind == JsonValueKind.String, list.Name); // field-name lists
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Pending))]
+    public async Task A_pending_row_is_not_mapped_yet(string method, string route)
+    {
+        var row = Table.Single(r => r.Method == method && r.Route == route);
+        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var client = factory.CreateClient();
+
+        using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
+
+        // Once a pending route answers, it has been built: move it to the built rows with its shape.
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound, $"{method} {route} is mapped; give it its shape in the table");
+    }
+
+    [Fact]
+    public async Task Every_mapped_route_is_a_built_row_of_the_table()
+    {
+        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var client = factory.CreateClient();
+
+        var mapped = MappedRoutes(factory.Services.GetRequiredService<EndpointDataSource>());
+        var built = Table.Where(row => row.Shape is not null).Select(row => (row.Method, row.Route)).ToHashSet();
+
+        mapped.ShouldBe(built, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_route_without_a_method_is_counted_as_every_method()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        await using var app = builder.Build();
+        app.Map("/anything", () => "ok");
+        app.MapGet("/one", () => "ok");
+        await app.StartAsync(TestContext.Current.CancellationToken);
+
+        MappedRoutes(app.Services.GetRequiredService<EndpointDataSource>()).ShouldBe([("*", "/anything"), ("GET", "/one")], ignoreOrder: true);
+    }
+
+    // Every (method, route) the app maps. A route without method metadata (app.Map, a fallback)
+    // answers every method: "*" can match no row of the table, so it fails the comparison instead
+    // of disappearing.
+    private static HashSet<(string Method, string Route)> MappedRoutes(EndpointDataSource source) =>
+        source.Endpoints.OfType<RouteEndpoint>()
+            .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
+                .Select(method => (method, "/" + endpoint.RoutePattern.RawText!.TrimStart('/'))))
+            .ToHashSet();
+
+    private async Task<Dictionary<string, string?>> EnvironmentAsync()
+    {
+        var environment = TestSettings.Production();
+        environment["DATABASE_URL"] = await database.CreateMigratedDatabaseUrlAsync();
+        return environment;
+    }
+}
