@@ -146,3 +146,42 @@ loader keeps them in one place and testable as a pure function.
 override, and every problem is reported in one exception. Kestrel takes its address from the same
 object, so `SERVE_HOST` must be an IP address or `localhost`; a host name would need a DNS lookup
 at start and is refused.
+
+### D-019 - The request line, and what is quiet
+
+Each request is logged once by Serilog's request logging, as `HTTP <method> <route> responded
+<status> in <ms> ms`, with exactly the properties `method`, `route`, `status` and `duration_ms`
+(spec 4's names); the route is the endpoint's template (`/api/orders/{order_id}`), and the raw
+path is not logged at all: ASP.NET Core's request scope would add `RequestPath` (and its own
+`RequestId`) to every line of a request, so the logging setup drops both properties. A request line for a failed request (5xx, or one that ended in an
+exception) is a `WARNING`: the top-level handler has already logged the failure at `ERROR`, and a
+second `ERROR` would alert twice. For the same reason the handler, when the response has already
+started and the 500 body can no longer be sent, aborts the connection instead of rethrowing into
+the server, which would log the failure again. The request middleware is given the app's
+logger explicitly, since it otherwise writes to Serilog's static logger, outside the app's outputs
+and alerts. The whole `Microsoft.AspNetCore` category is raised to `WARNING`, a superset of the
+`Hosting.Diagnostics` category spec 4 names: its other `INFO` lines (endpoint selected, result
+written) repeat the request line and can carry paths.
+
+### D-020 - A failed start: one FATAL line, exit code 1
+
+The bootstrap logger exists before anything else, so a failure to start is logged with the same
+redaction as everything else. Refused settings become one `FATAL` line listing every problem by
+variable name; any other exception is logged `FATAL` with its stack. The process then exits with
+code 1, rather than rethrowing into the runtime's own crash output, which would print the
+exception a second time outside the logger. Because the entry point catches the exception, the
+in-memory test host cannot observe it; `StartupFailureTests` runs the real app as a process and
+checks the exit code and the output instead. This FATAL line is the one place that writes through
+Serilog's static API rather than an `ILogger` with `[LoggerMessage]`: it runs before, or after the
+end of, the host that provides one.
+
+### D-021 - Alerts: behind redaction, queued, delivered off the request path
+
+The alert sink is an output behind the redacting sink, so an alert can never carry what a log line
+could not. It queues at most 100 alerts (`AlertSink.QueueCapacity`) and drops new ones when full,
+recording the drop in Serilog's self-log, so a storm of errors cannot block a request or grow
+memory. The cooldown check and its record happen under one lock, so concurrent identical errors
+still raise one alert. If one output of the redacting sink throws, the others still receive the
+event and the failure goes to the self-log. Delivery runs in a background service; until the Telegram client exists (`PHASE-3`) it
+writes an `INFO` line naming the alert's fingerprint. A failed delivery goes to the self-log
+(stderr) only: logging it would raise another alert. In demo mode the sink is not attached.
