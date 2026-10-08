@@ -186,3 +186,47 @@ still raise one alert. If one output of the redacting sink throws, the others st
 event and the failure goes to the self-log. Delivery runs in a background service; until the Telegram client exists (`PHASE-3`) it
 writes an `INFO` line naming the alert's fingerprint. A failed delivery goes to the self-log
 (stderr) only: logging it would raise another alert. In demo mode the sink is not attached.
+
+### D-022 - Generated migrations are reviewed, not restyled
+
+`dotnet ef migrations add` writes code in its own style (block namespaces, constant arrays), which
+the project's analyzers refuse. The migrations folder is marked `generated_code` in
+`.editorconfig`, so analyzers and the formatter skip it: the next generated migration then has
+the same shape as this one, and the review reads the SQL (`dotnet ef migrations script`), which
+is what runs. Hand edits are limited to what generation cannot do - here, the seed of spec 1.2.
+
+### D-023 - How the schema holds PII and its seed
+
+PII columns are `bytea` holding the cipher's token (`PiiCipher`), converted by an EF value
+converter bound to its column name. The converter captures the context's cipher, and EF caches a
+model per context type, so a model cache key that includes the cipher makes each cipher (one per
+process; one per test where tests use their own keys) get its own model rather than another
+process's key. The seed is plain SQL in the migration with no explicit ids, so the identity
+sequences start after it and the first row added later never collides. Demo mode applies the
+migrations from a hosted service registered first, which runs when the host starts - also in
+the in-memory test host, where the entry point stops at `Build()`. Tests run against one
+PostgreSQL container with trust authentication, as the demo's will have, and create a database per
+test. Its image, `postgres:16.15-alpine`, is the exact tag spec 6 asks for; it is fixed here, in
+`PHASE-1`, when the first container arrived (spec 6 had expected it in `PHASE-0`), and the demo's
+compose file will use the same tag.
+
+### D-024 - A first migration logs no ERROR
+
+On a new database EF Core 10 probes the migrations history with a query that fails, and logs the
+failed command at `ERROR` before it creates the table. Every `ERROR` alerts the operator
+(spec 4), so a normal first `migrate` would raise an alert. Creating the history table first did
+not stop the probe. The migration therefore runs on a context of its own whose EF failed-command
+event is logged at `DEBUG`; nothing else is quietened, and the app's own contexts keep the
+default. A migration that really fails still throws, and the caller logs it - the `migrate`
+command and a demo start both end in a `FATAL` line and a non-zero exit (`D-020`), which
+`MigrateCommandTests` checks against an unreachable server.
+
+### D-025 - The vocabulary of the status history
+
+Spec 1.5 records "from, to, actor, timestamp" for every status change. The actors are `client`
+(a cancellation by the client), `operator` (a button in the operator chat), `admin` (the admin
+panel of `PHASE-6`) and `system` (the order's creation, the one row whose `from_status` is NULL).
+They are stored in lower case, like the transfer times and unlike the statuses and codes of the
+API, because they never appear in the API: they are internal labels. `actor_telegram_id` records
+which person pressed a button, since several operators may share the chat
+(`OPERATOR_TELEGRAM_IDS`). The set is a database CHECK, so changing it is a migration.

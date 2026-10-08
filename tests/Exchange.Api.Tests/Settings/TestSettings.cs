@@ -31,9 +31,12 @@ internal static class TestSettings
         ["OPERATOR_TELEGRAM_IDS"] = "111, 222",
     };
 
-    /// <summary>A fresh, valid demo environment.</summary>
-    public static Dictionary<string, string?> Demo() => new()
+    /// <summary>
+    /// A fresh, valid demo environment. A host started with it migrates its database (spec 1.9), so
+    /// a test that starts one passes a real, password-less database URL.
+    /// </summary>
+    public static Dictionary<string, string?> Demo(string databaseUrl = "postgresql://postgres@db:5432/exchange") => new()
     {
-        ["DATABASE_URL"] = "postgresql://postgres@db:5432/exchange",
+        ["DATABASE_URL"] = databaseUrl,
     };
 }

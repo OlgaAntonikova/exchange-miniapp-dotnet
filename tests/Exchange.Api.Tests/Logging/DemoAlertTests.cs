@@ -1,3 +1,4 @@
+using Exchange.Api.Tests.Data;
 using Exchange.Api.Tests.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,7 @@ namespace Exchange.Api.Tests.Logging;
 
 /// <summary>Spec 1.9: in demo mode nothing goes to Telegram; an error is logged, its alert dropped.</summary>
 [Collection(nameof(ProcessEnvironmentGroup))]
-public sealed class DemoAlertTests
+public sealed class DemoAlertTests(PostgresFixture database)
 {
     private const int SettleMilliseconds = 1_500;
 
@@ -15,12 +16,13 @@ public sealed class DemoAlertTests
         LoggerMessage.Define(LogLevel.Error, new EventId(1), "Probe failure in demo mode");
 
     [Fact]
-    public void An_error_in_demo_mode_raises_no_alert()
+    public async Task An_error_in_demo_mode_raises_no_alert()
     {
         var logs = new CapturingSink();
+        var url = await database.CreateDatabaseUrlAsync();
         ProcessEnvironment.With("demo", () =>
         {
-            using var factory = new TestAppFactory(TestSettings.Demo(), logs);
+            using var factory = new TestAppFactory(TestSettings.Demo(url), logs);
             using var client = factory.CreateClient();
 
             ProbeError(factory.Services.GetRequiredService<ILogger<DemoAlertTests>>(), null);

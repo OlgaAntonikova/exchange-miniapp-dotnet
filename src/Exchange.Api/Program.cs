@@ -1,5 +1,6 @@
 using System.Net;
 using Exchange.Api.Alerts;
+using Exchange.Api.Data;
 using Exchange.Api.Logging;
 using Exchange.Api.Settings;
 using Serilog;
@@ -42,6 +43,13 @@ try
         return SettingsLoader.Load(environment, key => configuration[key]);
     });
 
+    // Demo mode migrates its throwaway database when the host starts, before anything else runs.
+    if (environment == AppEnvironment.Demo)
+    {
+        builder.Services.AddHostedService<DemoMigrator>();
+    }
+
+    builder.Services.AddExchangeData();
     builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddSingleton(services =>
     {
@@ -79,6 +87,13 @@ try
 
     var app = builder.Build();
     _ = app.Services.GetRequiredService<AppSettings>();
+
+    // D-008: outside demo mode, migrations are applied by this command, which then exits.
+    if (args is [DataSetup.MigrateCommand])
+    {
+        await DataSetup.MigrateAsync(app.Services, CancellationToken.None).ConfigureAwait(false);
+        return ExitSuccess;
+    }
 
     app.UseRequestLogging();
     app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
