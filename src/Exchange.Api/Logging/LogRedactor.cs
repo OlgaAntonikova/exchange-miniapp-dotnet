@@ -67,8 +67,8 @@ public static partial class LogRedactor
     // an object rendered by its ToString) is checked as text.
     private static ScalarValue RedactScalar(ScalarValue scalar)
     {
-        if (scalar.Value is null or bool or char or Enum or DateTime or DateTimeOffset or TimeSpan or Guid
-            or byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
+        if (scalar.Value is null or Enum or DateTime or DateTimeOffset or TimeSpan or Guid or decimal
+            || scalar.Value.GetType().IsPrimitive)
         {
             return scalar;
         }
