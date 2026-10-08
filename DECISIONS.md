@@ -230,3 +230,17 @@ They are stored in lower case, like the transfer times and unlike the statuses a
 API, because they never appear in the API: they are internal labels. `actor_telegram_id` records
 which person pressed a button, since several operators may share the chat
 (`OPERATOR_TELEGRAM_IDS`). The set is a database CHECK, so changing it is a migration.
+
+### D-026 - What the reference endpoints promise beyond the spec
+
+`GET /api/directions` lists the pairs in a fixed order: give codes in the order of spec 1.1
+(`RUB_WIRE`, `USD_CASH`, `EUR_CASH`, `USDT`), and for each the receive codes in the same way;
+field names within a list are sorted. It is built once from the domain table the API enforces,
+so the form never keeps a copy of its own. Reference lists are ordered by id, which is the
+seed's order.
+
+### D-027 - A same-base direction is refused before its fields
+
+When a quote or order request names a same-base direction and also has field problems, the
+same-base refusal (`invalid_direction`) is reported alone: the fields of a direction that cannot
+exist are not meaningful. `Directions.Check` returns it before looking at any field.

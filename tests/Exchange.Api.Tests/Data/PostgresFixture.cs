@@ -48,6 +48,15 @@ public sealed class PostgresFixture : IAsyncLifetime
         return $"postgresql://{User}@{_container.Hostname}:{_container.GetMappedPublicPort(PostgreSqlBuilder.PostgreSqlPort)}/{name}";
     }
 
+    /// <summary>Creates a database with every migration applied and returns its <c>DATABASE_URL</c>.</summary>
+    public async Task<string> CreateMigratedDatabaseUrlAsync()
+    {
+        var url = await CreateDatabaseUrlAsync();
+        await using var context = CreateContext(DatabaseUrl.Convert(url).ConnectionString!.Reveal(), new PiiCipher(new byte[PiiCipher.KeyLengthBytes]));
+        await context.Database.MigrateAsync();
+        return url;
+    }
+
     /// <summary>A context on a new database with all migrations applied.</summary>
     public async Task<(ExchangeDbContext Context, string ConnectionString)> CreateMigratedAsync(PiiCipher cipher)
     {
