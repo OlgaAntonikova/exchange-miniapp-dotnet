@@ -1,0 +1,26 @@
+# Secrets: never committed (RULE-SECRETS). .env.example is the committed template.
+.env
+.env.*
+!.env.example
+
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.binlog
+
+# Logs (spec 4: the rolling file is development-only)
+logs/
+
+# IDE and OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# dev-factory review stamp: local to the machine that ran the review
+.claude/
