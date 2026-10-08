@@ -1,0 +1,35 @@
+# Runs on every pull request into dev and every push to dev; a pull request is merged only when
+# this is green (RULE-GIT). The build and test steps match "build" and "test" in
+# .dev-factory.json. Actions are pinned to a commit SHA (a moved tag cannot change what runs);
+# the comment names the release (RULE-DEPENDENCIES).
+name: ci
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # INV-19 scans every commit, so the whole history is needed.
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          # The exact SDK of global.json, so CI matches the owner's machine (spec 6.2).
+          dotnet-version: 10.0.400
+      - name: Restore
+        run: dotnet restore
+      - name: Format
+        run: dotnet format --verify-no-changes --no-restore
+      - name: Build
+        run: dotnet build --nologo --no-restore
+      - name: Test
+        run: dotnet test --no-build

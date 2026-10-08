@@ -93,3 +93,18 @@ depending on a parser version or on a hand-written allow-list.
 Demo mode refuses to start beside `BOT_TOKEN`, `BOT_WEBHOOK_SECRET`, `JWT_SECRET` and
 `PII_ENCRYPTION_KEY` (spec 1.9). When `PHASE-6` brings an admin secret, it joins that list in
 the same change.
+
+### D-014 - Invariant globalization
+
+`InvariantGlobalization` is on for every project. Money, rates and dates must be parsed and
+formatted culture-free (spec 1.3, 1.4a), and with globalization invariant no code path can pick
+up the machine's culture by accident - a Russian-locale machine would otherwise turn `1.5` into
+`1,5`. Nothing needs a culture: the Russian texts are data (spec 1.7), and the Bank of Russia's
+`windows-1251` is a code page, which `CodePagesEncodingProvider` serves without ICU.
+
+### D-015 - Test projects do not document their members
+
+`GenerateDocumentationFile` stays on everywhere because `IDE0005` (unnecessary usings) only runs
+on build with it. Test members would then each need an XML comment (`CS1591`); test names are
+written as sentences and are their own documentation, so the test projects suppress `CS1591`
+alone, with the reason beside the suppression (`RULE-BUILD-HYGIENE`).
