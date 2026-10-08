@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "build": ["dotnet", "build", "--nologo"],
+  "test": ["dotnet", "test", "--no-build"],
+  "packageManager": "dotnet",
+  "dependencyFiles": ["Directory.Packages.props", ".config/dotnet-tools.json"],
+  "sourceExtensions": [".cs", ".csproj", ".props", ".targets", ".slnx", ".json", ".editorconfig", ".html", ".js", ".css", ".yml"],
+  "notes": [
+    "Do NOT add --nologo to the test command: under Microsoft.Testing.Platform, which xunit.v3 runs on,",
+    "it reports zero tests and exits 5, so the stop gate would block every session with a false red (D-009).",
+    "Integration tests (tests/Exchange.Api.Tests) need Docker Desktop running: Testcontainers starts PostgreSQL.",
+    "No fastTest yet: the guard refuses 'dotnet ... --project', and a trait filter is decided in PHASE-0 once measured.",
+    "Until PHASE-0 lands the solution, build and test fail: there is nothing to build yet."
+  ]
+}

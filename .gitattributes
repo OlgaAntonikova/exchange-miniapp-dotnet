@@ -1,0 +1,8 @@
+# Text is stored and checked out with LF everywhere, so files hash and diff the same on Windows
+# and in CI (spec 6.2).
+* text=auto eol=lf
+
+# Binary assets are never touched.
+*.png binary
+*.jpg binary
+*.ico binary
