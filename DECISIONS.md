@@ -134,12 +134,13 @@ xUnit runs alone.
 
 ### D-018 - Settings are validated after the host is built, and the listening address is an IP
 
-This replaces the Options pattern with `ValidateOnStart` that spec 6 first named (the spec row is
-amended). The settings are not independent sections to bind: demo mode changes which of them are
-required and which are refused, the order limits are checked against each other, and every
-problem has to be reported at once, by name and without its value. A binder plus per-option
-validators would split those rules across types and report them one type at a time. A single
-loader keeps them in one place and testable as a pure function.
+This replaces the Options pattern with `ValidateOnStart` that spec 6 first named (the spec row
+is amended, and the owner approved the amendment on 2026-10-08). The settings are not
+independent sections to bind: demo mode changes which of them are required and which are
+refused, the order limits are checked against each other, and every problem has to be reported
+at once, by name and without its value. A binder plus per-option validators would split those
+rules across types and report them one type at a time. A single loader keeps them in one place
+and testable as a pure function.
 
 `SettingsLoader` runs as the factory of the `AppSettings` singleton, resolved right after
 `Build()` and before the app serves: it then reads the final configuration, the one tests also

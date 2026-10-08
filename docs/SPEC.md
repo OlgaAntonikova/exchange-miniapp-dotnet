@@ -438,7 +438,7 @@ Fixed; do not substitute. The SDK and runtime are on the owner's machine already
 | Runtime | ASP.NET Core / .NET (LTS) | 10.0.11 |
 | Web | ASP.NET Core Minimal APIs with route groups; `System.Text.Json` | in-box |
 | Data | PostgreSQL; EF Core with Npgsql; EF Core migrations | PostgreSQL 16 (an exact `postgres:16.x-alpine` tag fixed in `PHASE-0` against Docker Hub and used by compose and Testcontainers alike); `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` 10.0.11, referenced **explicitly** (Npgsql's range `[10.0.4, 11.0.0)` would otherwise resolve 10.0.4 wherever the design package is absent); `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3; `Microsoft.EntityFrameworkCore.Design` 10.0.11 (`PrivateAssets=all`); `dotnet-ef` local tool 10.0.11 |
-| Settings | One typed settings object loaded and validated once at startup from the environment variables of section 1.11 by a hand-written loader that reports every problem at once (`D-018`; amended 2026-10-08 from the Options pattern with `ValidateOnStart`) | in-box |
+| Settings | One typed settings object loaded and validated once at startup from the environment variables of section 1.11 by a hand-written loader that reports every problem at once (`D-018`; amended 2026-10-08 from the Options pattern with `ValidateOnStart`, approved by the owner) | in-box |
 | HTTP out | `IHttpClientFactory` typed clients; retries hand-written | in-box |
 | Auth | `Microsoft.AspNetCore.Authentication.JwtBearer` - HS256, `JWT_TTL_SECONDS` tokens, re-issued silently from `initData`; `initData` HMAC with `HMACSHA256` and `CryptographicOperations.FixedTimeEquals` | 10.0.11 |
 | Crypto | `System.Security.Cryptography.AesGcm` (PII), `RandomNumberGenerator` (demo keys) | in-box |
@@ -518,6 +518,14 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
 - Gate: `dotnet build --nologo` and `dotnet test --no-build` are green locally and in CI;
   starting with a missing secret exits non-zero with an error naming the variable; `GET /healthz`
   returns 200 and the startup log line shows the version and masked secrets.
+- **Closed 2026-10-08**, approved by the owner. Pull requests #4 (skeleton, `Quantize`, `INV-20`,
+  CI), #5 (settings, `INV-8`, `INV-12`, `INV-19`) and #6 (logging, `INV-7`, the 500 body of
+  `INV-21`), each with a clean-context review and green CI. Gate run on `dev` at `92ff471`: build
+  0 warnings, 251/251 tests; started with no secrets, the app exited 1 with one `FATAL` line
+  naming all seven missing variables and no value; started with every setting, `GET /healthz`
+  answered `200 {"status":"ok"}` and the startup record showed version
+  `0.1.0+92ff471d61276de93799cd43f4f427840a01fdf5` with every credential as `**********`. The
+  owner also approved the amendment of the section 6 Settings row (`D-018`).
 
 ### PHASE-1 - Database and reference data
 
