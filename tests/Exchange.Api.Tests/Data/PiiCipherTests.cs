@@ -10,7 +10,7 @@ namespace Exchange.Api.Tests.Data;
 /// INV-13 for the cipher itself (RULE-TEST-FIRST): what goes in comes out only with the same key and
 /// the same column, every alteration is refused loudly, and nothing readable is left in the token.
 /// </summary>
-public sealed class PiiCipherTests
+public sealed partial class PiiCipherTests
 {
     private const string IbanColumn = "orders.iban";
     private const string NameColumn = "orders.recipient_name";

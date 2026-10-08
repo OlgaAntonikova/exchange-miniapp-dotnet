@@ -7,7 +7,7 @@ namespace Exchange.Api.Tests;
 /// INV-14: money is exact decimal end to end. This class holds the source scan; the database and
 /// API round trips join it with the schema and the endpoints.
 /// </summary>
-public sealed class MoneyTests
+public sealed partial class MoneyTests
 {
     [Fact]
     public void Money_code_holds_no_binary_floating_point_and_no_truncating_rounding()
@@ -54,6 +54,7 @@ public sealed class MoneyTests
     [InlineData("var r = 0.5m + 1M + 1_000m + 2.5000m;")]
     [InlineData("var count = 42; var big = 10_000;")]
     [InlineData("var c = 'd';")]
+    [InlineData("Sql(\"\"\"\n INSERT INTO t VALUES (0.5);\n \"\"\");")] // a raw string: SQL is data
     public void Prose_strings_and_decimal_literals_are_not_offences(string code) =>
         MoneySourceScan.Offences(code).ShouldBeEmpty();
 

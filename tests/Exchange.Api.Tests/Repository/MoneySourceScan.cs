@@ -30,8 +30,9 @@ internal static partial class MoneySourceScan
     /// <summary>The code of a file without string literals, character literals and comments.</summary>
     public static string CodeOnly(string source) => StringsAndCommentsPattern().Replace(source, " ");
 
-    // Verbatim and interpolated strings, regular strings, char literals, block and line comments.
-    [GeneratedRegex("""@"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|/\*[\s\S]*?\*/|//[^\n]*""")]
+    // Raw strings, verbatim and interpolated strings, regular strings, char literals, block and line
+    // comments.
+    [GeneratedRegex("""\$*"{3,}[\s\S]*?"{3,}|@"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|/\*[\s\S]*?\*/|//[^\n]*""")]
     private static partial Regex StringsAndCommentsPattern();
 
     [GeneratedRegex(@"\bdecimal\b")]
