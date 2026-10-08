@@ -42,7 +42,7 @@ public static class Quantize
         var scaled = value * factor;
         var whole = decimal.Truncate(scaled);
         var remainder = Math.Abs(scaled - whole);
-        if (remainder > Half)
+        if (remainder > Midpoint)
         {
             whole += Math.Sign(scaled);
         }
@@ -53,7 +53,7 @@ public static class Quantize
     }
 
     private const int MaxScaleDigits = 28;
-    private const decimal Half = 0.5m;
+    private const decimal Midpoint = 0.5m;
     private const decimal Ten = 10m;
 
     private static decimal PowerOfTen(int exponent)
