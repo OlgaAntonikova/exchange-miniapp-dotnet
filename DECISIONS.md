@@ -297,3 +297,20 @@ quantizes only the rates - so the applied markup a quote reports is the one its 
 computed from (`INV-4`). A receive amount that quantizes to zero is
 not refused here: it is a valid result of the formula, and turning it into the 422
 `amount_too_small` of section 1.10 belongs to the endpoint, as do the order limits.
+
+### D-031 - How the two rate sources are read
+
+Both providers share one fetch: a GET that only a 200 answer passes, with every failure turned
+into a short reason code that names no URL and no body (`http_<status>`, `transport_<type>`,
+`timeout`); the transport's exception is not chained, since its message quotes the URL. A
+cancellation the caller asked for is passed on as a cancellation, not a failed fetch. XML is
+read with `DtdProcessing.Prohibit` and no resolver (`D-012`), so any document with a DTD is
+`malformed_xml`. Numbers are ASCII digits with an optional fraction after the source's own
+decimal mark - a point for the ECB, a comma for the Bank of Russia, and never the other - and
+must be positive; the Bank of Russia's `Nominal` must be a whole number. Dates are parsed with
+an exact format. The Bank of Russia body is decoded as windows-1251 by the provider itself,
+whatever the document declares, so the parser never picks an encoding; while only ASCII fields
+are read, that decoding cannot be observed, and no test claims to guard it. A snapshot carries
+`ValidUntil`, the start of the day after the last day its effective date may be used, at the
+source's fixed offset (UTC+1 for the ECB, which allows no lead, UTC+3 for the Bank of Russia),
+so a cached snapshot is refused once its window closes, not only when it is fetched.
