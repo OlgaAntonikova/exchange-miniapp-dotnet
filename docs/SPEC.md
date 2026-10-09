@@ -437,7 +437,7 @@ Fixed; do not substitute. The SDK and runtime are on the owner's machine already
 | SDK | .NET SDK, pinned in `global.json` (`rollForward: latestPatch`) | 10.0.400 |
 | Runtime | ASP.NET Core / .NET (LTS) | 10.0.11 |
 | Web | ASP.NET Core Minimal APIs with route groups; `System.Text.Json` | in-box |
-| Data | PostgreSQL; EF Core with Npgsql; EF Core migrations | PostgreSQL 16 (an exact `postgres:16.x-alpine` tag fixed in `PHASE-0` against Docker Hub and used by compose and Testcontainers alike); `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` 10.0.11, referenced **explicitly** (Npgsql's range `[10.0.4, 11.0.0)` would otherwise resolve 10.0.4 wherever the design package is absent); `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3; `Microsoft.EntityFrameworkCore.Design` 10.0.11 (`PrivateAssets=all`); `dotnet-ef` local tool 10.0.11 |
+| Data | PostgreSQL; EF Core with Npgsql; EF Core migrations | PostgreSQL 16 (the exact tag `postgres:16.15-alpine`, fixed in `PHASE-1` when the first container arrived (`D-023`) and used by compose and Testcontainers alike); `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` 10.0.11, referenced **explicitly** (Npgsql's range `[10.0.4, 11.0.0)` would otherwise resolve 10.0.4 wherever the design package is absent); `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3; `Microsoft.EntityFrameworkCore.Design` 10.0.11 (`PrivateAssets=all`); `dotnet-ef` local tool 10.0.11 |
 | Settings | One typed settings object loaded and validated once at startup from the environment variables of section 1.11 by a hand-written loader that reports every problem at once (`D-018`; amended 2026-10-08 from the Options pattern with `ValidateOnStart`, approved by the owner) | in-box |
 | HTTP out | `IHttpClientFactory` typed clients; retries hand-written | in-box |
 | Auth | `Microsoft.AspNetCore.Authentication.JwtBearer` - HS256, `JWT_TTL_SECONDS` tokens, re-issued silently from `initData`; `initData` HMAC with `HMACSHA256` and `CryptographicOperations.FixedTimeEquals` | 10.0.11 |
@@ -540,6 +540,16 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   `/api/directions` returns the direction table, each in the shape of section 1.10.
 - Generated migrations are reviewed by hand before they are committed: the pull request quotes
   the SQL of `dotnet ef migrations script` and the reviewer reads it.
+- **Closed 2026-10-09**, approved by the owner. Pull requests #8 (directions in the domain), #9
+  (PII cipher, the money source scan), #10 (schema, migration with the seed, `migrate`; its SQL
+  quoted and reviewed), #11 (reference endpoints, the `INV-17` contract harness), each with a
+  clean-context review and green CI. Gate run on `dev` at `b5fe3cd`: build 0 warnings, 502/502
+  tests; on an empty `postgres:16.15-alpine`, `dotnet run -- migrate` in `src/Exchange.Api` exited
+  0 with one log line, `Database migrated: 1 migration(s) applied 20261008212257_InitialSchema`,
+  and left 6 cities, 5 banks and 3 networks; with one city made inactive, the running app's
+  `GET /api/cities` listed the other five, money as strings at scale 4, and `/api/banks`,
+  `/api/usdt-networks` and `/api/directions` answered 5, 3 and 14 rows in the shape of section
+  1.10.
 
 ### PHASE-2 - Telegram authentication
 
