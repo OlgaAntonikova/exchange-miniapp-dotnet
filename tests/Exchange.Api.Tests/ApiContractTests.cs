@@ -1,5 +1,8 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
+using Exchange.Api.Tests.Auth;
 using Exchange.Api.Tests.Data;
 using Exchange.Api.Tests.Settings;
 using Microsoft.AspNetCore.Builder;
@@ -11,10 +14,10 @@ using Shouldly;
 namespace Exchange.Api.Tests;
 
 /// <summary>
-/// INV-17: every row of the API table of spec 1.10 is served with its method, path, success status
-/// and response property names and JSON types. Rows not yet built are listed as pending, and the
-/// list can only shrink: a pending route must not be mapped, a mapped route must be in the table,
-/// and the list is empty at the PHASE-5 gate.
+/// INV-17: every row of the API table of spec 1.10 is served with its method, path, auth
+/// requirement, success status and response property names and JSON types. Rows not yet built
+/// are listed as pending, and the list can only shrink: a pending route must not be mapped, a
+/// mapped route must be in the table, and the list is empty at the PHASE-5 gate.
 /// </summary>
 public sealed class ApiContractTests(PostgresFixture database)
 {
@@ -53,28 +56,47 @@ public sealed class ApiContractTests(PostgresFixture database)
         ["optional_fields"] = JsonValueKind.Array,
     };
 
-    // Spec 1.10, row by row: method, route template, the example path requested, success status,
-    // whether the body is a list, and the shape of one object (null: not built yet).
-    private static readonly List<(string Method, string Route, string Path, HttpStatusCode Status, bool IsList, Dictionary<string, JsonValueKind>? Shape)> Table =
+    private static readonly Dictionary<string, JsonValueKind> TokenShape = new()
+    {
+        ["access_token"] = JsonValueKind.String,
+        ["token_type"] = JsonValueKind.String,
+        ["expires_in"] = JsonValueKind.Number,
+    };
+
+    private static readonly Dictionary<string, JsonValueKind> MeShape = new()
+    {
+        ["telegram_id"] = JsonValueKind.Number,
+        ["username"] = JsonValueKind.String,
+        ["first_name"] = JsonValueKind.String,
+        ["loyalty_points"] = JsonValueKind.Number,
+    };
+
+    // Spec 1.10, row by row: method, route template, the example path requested, whether it needs a
+    // token, success status, whether the body is a list, and the shape of one object (null: not
+    // built yet).
+    private static readonly List<(string Method, string Route, string Path, bool Auth, HttpStatusCode Status, bool IsList, Dictionary<string, JsonValueKind>? Shape)> Table =
     [
-        ("GET", "/healthz", "/healthz", HttpStatusCode.OK, false, HealthShape),
-        ("GET", "/api/cities", "/api/cities", HttpStatusCode.OK, true, CityShape),
-        ("GET", "/api/banks", "/api/banks", HttpStatusCode.OK, true, BankShape),
-        ("GET", "/api/usdt-networks", "/api/usdt-networks", HttpStatusCode.OK, true, NetworkShape),
-        ("GET", "/api/directions", "/api/directions", HttpStatusCode.OK, true, DirectionShape),
-        ("POST", "/api/auth/telegram", "/api/auth/telegram", HttpStatusCode.OK, false, null),
-        ("POST", "/api/auth/demo", "/api/auth/demo", HttpStatusCode.OK, false, null),
-        ("GET", "/api/users/me", "/api/users/me", HttpStatusCode.OK, false, null),
-        ("POST", "/api/rate", "/api/rate", HttpStatusCode.OK, false, null),
-        ("POST", "/api/orders", "/api/orders", HttpStatusCode.Created, false, null),
-        ("GET", "/api/orders", "/api/orders", HttpStatusCode.OK, true, null),
-        ("GET", "/api/orders/{order_id}", "/api/orders/1", HttpStatusCode.OK, false, null),
-        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", HttpStatusCode.OK, false, null),
-        ("POST", "/api/bot/webhook", "/api/bot/webhook", HttpStatusCode.OK, false, null),
+        ("GET", "/healthz", "/healthz", false, HttpStatusCode.OK, false, HealthShape),
+        ("GET", "/api/cities", "/api/cities", false, HttpStatusCode.OK, true, CityShape),
+        ("GET", "/api/banks", "/api/banks", false, HttpStatusCode.OK, true, BankShape),
+        ("GET", "/api/usdt-networks", "/api/usdt-networks", false, HttpStatusCode.OK, true, NetworkShape),
+        ("GET", "/api/directions", "/api/directions", false, HttpStatusCode.OK, true, DirectionShape),
+        ("POST", "/api/auth/telegram", "/api/auth/telegram", false, HttpStatusCode.OK, false, TokenShape),
+        ("POST", "/api/auth/demo", "/api/auth/demo", false, HttpStatusCode.OK, false, null),
+        ("GET", "/api/users/me", "/api/users/me", true, HttpStatusCode.OK, false, MeShape),
+        ("POST", "/api/rate", "/api/rate", true, HttpStatusCode.OK, false, null),
+        ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, null),
+        ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, null),
+        ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, null),
+        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, null),
+        ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, null),
     ];
 
     public static TheoryData<string, string> Built() =>
         [.. Table.Where(row => row.Shape is not null).Select(row => (row.Method, row.Route))];
+
+    public static TheoryData<string, string> BuiltWithAuth() =>
+        [.. Table.Where(row => row.Shape is not null && row.Auth).Select(row => (row.Method, row.Route))];
 
     public static TheoryData<string, string> Pending() =>
         [.. Table.Where(row => row.Shape is null).Select(row => (row.Method, row.Route))];
@@ -86,8 +108,18 @@ public sealed class ApiContractTests(PostgresFixture database)
         var row = Table.Single(r => r.Method == method && r.Route == route);
         using var factory = new TestAppFactory(await EnvironmentAsync());
         using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(new HttpMethod(method), row.Path);
+        if (route == SignInRoute)
+        {
+            request.Content = JsonContent.Create(new Dictionary<string, string> { ["init_data"] = InitData() });
+        }
 
-        using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
+        if (row.Auth)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await TelegramAuth.SignInAsync(client, InitData()));
+        }
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(row.Status);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
@@ -102,6 +134,19 @@ public sealed class ApiContractTests(PostgresFixture database)
                 list.Value.EnumerateArray().ShouldAllBe(element => element.ValueKind == JsonValueKind.String, list.Name); // field-name lists
             }
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(BuiltWithAuth))]
+    public async Task A_built_row_that_needs_a_token_refuses_a_request_without_one(string method, string route)
+    {
+        var row = Table.Single(r => r.Method == method && r.Route == route);
+        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var client = factory.CreateClient();
+
+        using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
+
+        await AuthApiTests.ShouldBeUnauthorizedAsync(response);
     }
 
     [Theory]
@@ -151,6 +196,11 @@ public sealed class ApiContractTests(PostgresFixture database)
             .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
                 .Select(method => (method, "/" + endpoint.RoutePattern.RawText!.TrimStart('/'))))
             .ToHashSet();
+
+    private const string SignInRoute = "/api/auth/telegram";
+
+    private static string InitData() =>
+        TelegramAuth.InitData(TestSettings.BotToken, 7_000_003, "Ivan", "ivan_p", DateTimeOffset.UtcNow.AddSeconds(-5));
 
     private async Task<Dictionary<string, string?>> EnvironmentAsync()
     {

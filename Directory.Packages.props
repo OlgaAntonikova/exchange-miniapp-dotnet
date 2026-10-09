@@ -17,6 +17,12 @@
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Auth (spec 6)">
+    <!-- HS256 tokens, signed and validated through Microsoft.IdentityModel.JsonWebTokens, which it
+         brings. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+  </ItemGroup>
+
   <ItemGroup Label="Data (spec 6)">
     <!-- EF Core and Relational are referenced explicitly at the runtime's version: Npgsql's range
          [10.0.4, 11.0.0) would otherwise resolve 10.0.4 wherever the design package is absent. -->
