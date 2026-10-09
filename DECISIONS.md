@@ -283,3 +283,17 @@ loyalty points.
 Every refusal - by the bearer handler's challenge or by an endpoint - writes the same body and
 `WWW-Authenticate: Bearer`, and logs one `WARNING` with a short `Reason` (a code, or the token
 library's exception type name) and nothing of the token or the input.
+
+### D-030 - What the rate engine refuses, and what it leaves to the API
+
+`RateEngine.Quote` is the formula of spec 1.3 and nothing else: it takes mids, markups and the
+discount as given and does no I/O. Besides a same-base direction (`INV-6`) it refuses, with a
+reason code, inputs no quote can come from: a non-positive amount, a negative markup component or
+discount, an applied markup of 100 % or more (nothing would be paid out), a missing or
+non-positive mid, a base rate beyond what a decimal can hold at the rate scale
+(`rate_out_of_range`), and an effective rate that rounds to zero at the rate scale. The total and
+the applied markup are quantized to the percentage scale before they enter the formula - spec 1.3
+quantizes only the rates - so the applied markup a quote reports is the one its effective rate was
+computed from (`INV-4`). A receive amount that quantizes to zero is
+not refused here: it is a valid result of the formula, and turning it into the 422
+`amount_too_small` of section 1.10 belongs to the endpoint, as do the order limits.
