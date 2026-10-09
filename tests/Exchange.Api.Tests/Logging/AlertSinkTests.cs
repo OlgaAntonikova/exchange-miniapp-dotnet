@@ -96,6 +96,57 @@ public sealed class AlertSinkTests
         Drain(sink).Count.ShouldBe(AlertSink.QueueCapacity);
     }
 
+    [Fact]
+    public void An_alert_key_splits_one_template_into_separate_fingerprints()
+    {
+        var sink = new AlertSink(new FakeTimeProvider(), Cooldown);
+
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.KeyProperty, "ecb")));
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "cbr", (AlertSink.KeyProperty, "cbr")));
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.KeyProperty, "ecb")));
+
+        var alerts = Drain(sink);
+        alerts.Select(alert => alert.Fingerprint).ShouldBe(
+        [
+            "Exchange.Api.Rates | Rate fetch failed for {Provider} | ecb",
+            "Exchange.Api.Rates | Rate fetch failed for {Provider} | cbr",
+        ]);
+    }
+
+    [Fact]
+    public void An_event_may_carry_its_own_cooldown()
+    {
+        var time = new FakeTimeProvider();
+        var sink = new AlertSink(time, Cooldown);
+        const int RateCooldownSeconds = 900;
+
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, RateCooldownSeconds)));
+        time.Advance(Cooldown); // the default cooldown has passed, the event's own has not
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, RateCooldownSeconds)));
+        time.Advance(TimeSpan.FromSeconds(RateCooldownSeconds) - Cooldown);
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, RateCooldownSeconds)));
+
+        Drain(sink).Count.ShouldBe(2);
+    }
+
+    [Theory]
+    [InlineData("900")] // a string is not a number of seconds
+    [InlineData(-5)]
+    [InlineData(0)]
+    public void A_cooldown_that_is_not_a_positive_integer_falls_back_to_the_default(object value)
+    {
+        var time = new FakeTimeProvider();
+        var sink = new AlertSink(time, Cooldown);
+
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, value)));
+        time.Advance(Cooldown - TimeSpan.FromSeconds(1));
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, value)));
+        time.Advance(TimeSpan.FromSeconds(1));
+        sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, value)));
+
+        Drain(sink).Count.ShouldBe(2);
+    }
+
     private static List<Alert> Drain(AlertSink sink)
     {
         var alerts = new List<Alert>();
@@ -107,7 +158,7 @@ public sealed class AlertSinkTests
         return alerts;
     }
 
-    private static LogEvent Event(LogEventLevel level, string template, object? value)
+    private static LogEvent Event(LogEventLevel level, string template, object? value, params (string Name, object Value)[] extra)
     {
         var parsed = Parser.Parse(template);
         var properties = new List<LogEventProperty> { new("SourceContext", new ScalarValue("Exchange.Api.Rates")) };
@@ -117,6 +168,7 @@ public sealed class AlertSinkTests
             properties.Add(new LogEventProperty(name, new ScalarValue(value)));
         }
 
+        properties.AddRange(extra.Select(property => new LogEventProperty(property.Name, new ScalarValue(property.Value))));
         return new LogEvent(DateTimeOffset.UtcNow, level, null, parsed, properties);
     }
 }
