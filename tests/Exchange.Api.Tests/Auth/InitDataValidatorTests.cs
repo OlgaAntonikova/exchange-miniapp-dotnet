@@ -149,7 +149,7 @@ public sealed class InitDataValidatorTests
     }
 
     [Theory]
-    [InlineData("auth_date=1&user=é&hash=00")] // a raw non-ASCII character
+    [InlineData("auth_date=1&user=\u00e9&hash=00")] // a raw non-ASCII character
     [InlineData("auth_date=1&user=%ZZ&hash=00")] // a broken escape
     [InlineData("auth_date=1&user=%FF&hash=00")] // not UTF-8
     [InlineData("auth_date=1&&hash=00")] // an empty segment
