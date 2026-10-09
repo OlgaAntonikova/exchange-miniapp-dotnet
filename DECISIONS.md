@@ -244,3 +244,16 @@ seed's order.
 When a quote or order request names a same-base direction and also has field problems, the
 same-base refusal (`invalid_direction`) is reported alone: the fields of a direction that cannot
 exist are not meaningful. `Directions.Check` returns it before looking at any field.
+
+### D-028 - What the initData validator refuses beyond the signature and the age
+
+The spec fixes the HMAC check (`INV-1`) and the age (`INV-2`, with a 60-second skew). Around
+them: the data-check-string is every field except `hash` - `signature` included - sorted by key in
+byte order and joined by line feeds, as Telegram's documentation describes the HMAC method (the
+`PHASE-2` gate, with a real `initData`, is the proof); the query is parsed strictly (every segment
+`key=value` with a key, every escape `%XX`, no raw non-ASCII character (Telegram percent-encodes it), `+` as a space, the decoded bytes valid UTF-8); a field
+sent twice is refused, since which copy was signed would be ambiguous; input over 8192 characters
+is refused before parsing (a generous margin over a user object and a few short fields); the received hash must be the exact
+lower-case hex, compared in constant time; `auth_date` is plain ASCII digits; `user.id` must be a
+positive JSON integer and `first_name` a string. Every refusal carries a short reason code and
+nothing of the input; parser exceptions, which can quote it, are not chained.
