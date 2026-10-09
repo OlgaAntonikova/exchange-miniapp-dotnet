@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Exchange.Api.Tests.Auth;
 using Exchange.Api.Tests.Data;
+using Exchange.Api.Tests.Rates;
 using Exchange.Api.Tests.Settings;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -71,6 +72,19 @@ public sealed class ApiContractTests(PostgresFixture database)
         ["loyalty_points"] = JsonValueKind.Number,
     };
 
+    private static readonly Dictionary<string, JsonValueKind> QuoteShape = new()
+    {
+        ["give"] = JsonValueKind.String,
+        ["receive"] = JsonValueKind.String,
+        ["amount_give"] = JsonValueKind.String,
+        ["amount_receive"] = JsonValueKind.String,
+        ["base_rate"] = JsonValueKind.String,
+        ["effective_rate"] = JsonValueKind.String,
+        ["markup_percent"] = JsonValueKind.Object,
+        ["provider"] = JsonValueKind.String,
+        ["rate_taken_at"] = JsonValueKind.String,
+    };
+
     // Spec 1.10, row by row: method, route template, the example path requested, whether it needs a
     // token, success status, whether the body is a list, and the shape of one object (null: not
     // built yet).
@@ -84,7 +98,7 @@ public sealed class ApiContractTests(PostgresFixture database)
         ("POST", "/api/auth/telegram", "/api/auth/telegram", false, HttpStatusCode.OK, false, TokenShape),
         ("POST", "/api/auth/demo", "/api/auth/demo", false, HttpStatusCode.OK, false, null),
         ("GET", "/api/users/me", "/api/users/me", true, HttpStatusCode.OK, false, MeShape),
-        ("POST", "/api/rate", "/api/rate", true, HttpStatusCode.OK, false, null),
+        ("POST", "/api/rate", "/api/rate", true, HttpStatusCode.OK, false, QuoteShape),
         ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, null),
         ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, null),
         ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, null),
@@ -106,12 +120,17 @@ public sealed class ApiContractTests(PostgresFixture database)
     public async Task A_built_row_answers_with_its_status_and_shape(string method, string route)
     {
         var row = Table.Single(r => r.Method == method && r.Route == route);
-        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var factory = new TestAppFactory(await EnvironmentAsync(), services: FakeSources.Replace());
         using var client = factory.CreateClient();
         using var request = new HttpRequestMessage(new HttpMethod(method), row.Path);
         if (route == SignInRoute)
         {
             request.Content = JsonContent.Create(new Dictionary<string, string> { ["init_data"] = InitData() });
+        }
+
+        if (route == RateRoute)
+        {
+            request.Content = JsonContent.Create(new Dictionary<string, string> { ["give"] = "USD_CASH", ["receive"] = "EUR_WIRE", ["amount_give"] = "100" });
         }
 
         if (row.Auth)
@@ -141,7 +160,7 @@ public sealed class ApiContractTests(PostgresFixture database)
     public async Task A_built_row_that_needs_a_token_refuses_a_request_without_one(string method, string route)
     {
         var row = Table.Single(r => r.Method == method && r.Route == route);
-        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var factory = new TestAppFactory(await EnvironmentAsync(), services: FakeSources.Replace());
         using var client = factory.CreateClient();
 
         using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
@@ -154,7 +173,7 @@ public sealed class ApiContractTests(PostgresFixture database)
     public async Task A_pending_row_is_not_mapped_yet(string method, string route)
     {
         var row = Table.Single(r => r.Method == method && r.Route == route);
-        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var factory = new TestAppFactory(await EnvironmentAsync(), services: FakeSources.Replace());
         using var client = factory.CreateClient();
 
         using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
@@ -166,7 +185,7 @@ public sealed class ApiContractTests(PostgresFixture database)
     [Fact]
     public async Task Every_mapped_route_is_a_built_row_of_the_table()
     {
-        using var factory = new TestAppFactory(await EnvironmentAsync());
+        using var factory = new TestAppFactory(await EnvironmentAsync(), services: FakeSources.Replace());
         using var client = factory.CreateClient();
 
         var mapped = MappedRoutes(factory.Services.GetRequiredService<EndpointDataSource>());
@@ -198,6 +217,7 @@ public sealed class ApiContractTests(PostgresFixture database)
             .ToHashSet();
 
     private const string SignInRoute = "/api/auth/telegram";
+    private const string RateRoute = "/api/rate";
 
     private static string InitData() =>
         TelegramAuth.InitData(TestSettings.BotToken, 7_000_003, "Ivan", "ivan_p", DateTimeOffset.UtcNow.AddSeconds(-5));

@@ -18,6 +18,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The server reads the page's locale file next to its own assembly, so a host started from
+         any directory (the migrate command included) finds it (spec 1.7). -->
+    <Content Update="wwwroot/locale/ru.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Exchange.Domain\Exchange.Domain.csproj" />
   </ItemGroup>
 

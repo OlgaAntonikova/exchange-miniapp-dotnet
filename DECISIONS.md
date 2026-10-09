@@ -318,15 +318,43 @@ so a cached snapshot is refused once its window closes, not only when it is fetc
 ### D-032 - The rate cache, the freshness guard and the routes
 
 Each source has one `RateService`. It fetches at most once per cache period whether the last
-fetch worked or not, so a dead source is not hit by every request; a caller that gives up mid-fetch
-leaves no attempt behind. The last good snapshot is served while the time since it was fetched is
-at most the source's maximum age and the moment is before its `ValidUntil` (`D-031`); otherwise
-the answer is `RatesUnavailableException` with a reason code and a `WARNING`, never a number. A
-failed fetch is logged at `ERROR` with the provider, the reason and the duration. To give each
-source its own alert on `RATE_ALERT_COOLDOWN_SECONDS`, the alert sink reads two optional event
-properties: `AlertKey`, appended to the fingerprint, and `AlertCooldownSeconds`, a positive whole
-number of seconds that replaces the default cooldown; the rate service sets both for its failures.
-`RateSources` routes USD and EUR to the ECB and RUB to the Bank of Russia, asks each source once
-per quote for only the currencies the direction needs, names the providers it used joined by `+`
-in alphabetical order, and takes the oldest snapshot time. Each source's `HttpClient` has the
-`RATE_FETCH_TIMEOUT_SECONDS` timeout and a 1 MiB response limit.
+fetch worked or not, so a dead source is not hit by every request; a caller that gives up
+mid-fetch leaves no attempt behind. The last good snapshot is served while the time since it
+was fetched is at most the source's maximum age - exactly the maximum age is still fresh, which
+settles the one instant where spec 1.4's "younger than" and `RULE-RATE-FRESHNESS`'s "older
+than" differ - and the moment is before its `ValidUntil` (`D-031`); otherwise the answer is
+`RatesUnavailableException` with a reason code and a `WARNING`, never a number. A failed fetch
+is logged at `ERROR` with the provider, the reason and the duration. To give each source its
+own alert on `RATE_ALERT_COOLDOWN_SECONDS`, the alert sink reads two optional event properties:
+`AlertKey`, appended to the fingerprint, and `AlertCooldownSeconds`, a positive whole number of
+seconds that replaces the default cooldown; the rate service sets both for its failures.
+`RateSources` routes USD and EUR to the ECB and RUB to the Bank of Russia, asks each source
+once per quote for only the currencies the direction needs, names the providers it used joined
+by `+` in alphabetical order, and takes the oldest snapshot time. Each source's `HttpClient`
+has the `RATE_FETCH_TIMEOUT_SECONDS` timeout and a 1 MiB response limit.
+
+### D-033 - How POST /api/rate reads a request, and where the server's texts come from
+
+The quote body is read up to 16 KB and parsed with duplicate properties refused, since which
+copy counts would be ambiguous; an unreadable, oversized, non-object or duplicated body is the
+422 `invalid_request` naming `body`. Property names are matched exactly in snake_case: a
+case-insensitive match is not used, so `Give` is a property outside the contract and is ignored
+like `user_id`. A reference id sent as JSON `null` counts as absent, as if the property were
+not there - the form sends `null` for a field it cleared - while any other non-integer is
+refused. The request is checked in stages, and each stage names every field it faults before
+the next one runs: first the values (`give`, `receive`, `amount_give`, then the reference ids
+in the order of section 1.10), then the direction (a same-base pair, then its missing fields
+before the fields it does not use, each group sorted), then the reference rows. A reference id
+must name a row that exists, is active and fits its side (a sender bank `WIRE`/`RUB`/`RU`, an
+ATM bank `ATM`/`EUR`/`ME`, a city in `ME`); every row that does not is listed. The order limits
+of section 1.5 are not applied to a quote: `amount_out_of_range` is an order's refusal, and a
+quote of any valid amount is shown. Once the request is valid, an engine refusal (markups
+reaching 100 %, a broken mid) is the server's fault and is the 500 of section 1.10. The pricing
+path is one class, `Pricer`, which orders will reuse.
+
+The server's texts come from `wwwroot/locale/ru.json`, copied beside the assembly at build and
+publish, so a host started from any directory, the `migrate` command included, reads the same
+file; it is loaded at startup, and a missing key fails the start. A text's `{name}` placeholders
+must match the values given exactly, or the call fails. The file holds only the keys the server
+uses so far; the page's keys arrive with the front end in `PHASE-5`. Each rate source's client and
+cache service are keyed singletons, so the container disposes them with the app.

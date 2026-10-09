@@ -14,17 +14,20 @@ public class TestAppFactory : WebApplicationFactory<Program>
     private readonly Dictionary<string, string?> _environment;
     private readonly CapturingSink? _logs;
     private readonly TimeProvider? _time;
+    private readonly Action<IServiceCollection>? _services;
 
     /// <summary>
     /// A factory with the given environment (a key mapped to null is left unset); when
     /// <paramref name="logs"/> is given, the app's log output goes there, still behind redaction;
-    /// when <paramref name="time"/> is given, the app's clock is that one.
+    /// when <paramref name="time"/> is given, the app's clock is that one; <paramref name="services"/>
+    /// replaces services after the app's own registrations.
     /// </summary>
-    public TestAppFactory(Dictionary<string, string?> environment, CapturingSink? logs = null, TimeProvider? time = null)
+    public TestAppFactory(Dictionary<string, string?> environment, CapturingSink? logs = null, TimeProvider? time = null, Action<IServiceCollection>? services = null)
     {
         _environment = environment;
         _logs = logs;
         _time = time;
+        _services = services;
     }
 
     /// <inheritdoc />
@@ -44,6 +47,11 @@ public class TestAppFactory : WebApplicationFactory<Program>
         if (_time is not null)
         {
             builder.ConfigureTestServices(services => services.AddSingleton(_time));
+        }
+
+        if (_services is not null)
+        {
+            builder.ConfigureTestServices(_services);
         }
     }
 }

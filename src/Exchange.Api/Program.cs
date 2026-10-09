@@ -3,7 +3,9 @@ using Exchange.Api.Alerts;
 using Exchange.Api.Auth;
 using Exchange.Api.Data;
 using Exchange.Api.Json;
+using Exchange.Api.Locale;
 using Exchange.Api.Logging;
+using Exchange.Api.Pricing;
 using Exchange.Api.Rates;
 using Exchange.Api.Reference;
 using Exchange.Api.Settings;
@@ -58,6 +60,13 @@ try
     builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddExchangeAuth();
     builder.Services.AddExchangeRates();
+    builder.Services.AddScoped<Pricer>();
+
+    // The page's own locale file, copied beside the assembly, read once; a missing key fails the
+    // start (spec 1.7).
+    builder.Services.AddSingleton(_ => LocaleTexts.Load(
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, LocaleTexts.WebRootDirectory, LocaleTexts.RelativePath)),
+        LocaleKeys.All));
     builder.Services.AddSingleton(services =>
     {
         var settings = services.GetRequiredService<AppSettings>();
@@ -94,6 +103,7 @@ try
 
     var app = builder.Build();
     _ = app.Services.GetRequiredService<AppSettings>();
+    _ = app.Services.GetRequiredService<LocaleTexts>();
 
     // D-008: outside demo mode, migrations are applied by this command, which then exits.
     if (args is [DataSetup.MigrateCommand])
@@ -108,6 +118,7 @@ try
     app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
     app.MapReferenceEndpoints();
     app.MapAuthEndpoints();
+    app.MapRateEndpoints();
 
     await app.RunAsync().ConfigureAwait(false);
     return ExitSuccess;
