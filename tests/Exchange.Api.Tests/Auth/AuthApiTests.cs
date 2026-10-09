@@ -164,7 +164,7 @@ public sealed class AuthApiTests(PostgresFixture database)
     [InlineData(SignInCapBytes, "too_long")] // read whole, then refused by the validator
     [InlineData(SignInCapBytes + 1, "body_too_long")]
     [InlineData(1_000_000, "body_too_long")]
-    public async Task A_body_over_the_cap_is_refused_as_too_long(int bodyBytes, string reason)
+    public async Task A_body_is_refused_by_size_from_one_byte_past_the_cap(int bodyBytes, string reason)
     {
         var logs = new CapturingSink();
         using var factory = new TestAppFactory(await EnvironmentAsync(), logs);
@@ -252,17 +252,53 @@ public sealed class AuthApiTests(PostgresFixture database)
     }
 }
 
-/// <summary>A memory stream that counts the bytes handed out, in reads of at most 3 bytes.</summary>
-internal sealed class CountingStream(byte[] content) : MemoryStream(content)
+/// <summary>
+/// A stream over <paramref name="content"/> that hands out at most 3 bytes per read and counts
+/// them, whichever read method is used (CopyToAsync and the synchronous reads included).
+/// </summary>
+internal sealed class CountingStream(byte[] content) : Stream
 {
     private const int MaxChunkBytes = 3;
+    private int _position;
 
     public long BytesRead { get; private set; }
 
-    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    public override bool CanRead => true;
+
+    public override bool CanSeek => false;
+
+    public override bool CanWrite => false;
+
+    public override long Length => throw new NotSupportedException();
+
+    public override long Position
     {
-        var read = await base.ReadAsync(buffer[..Math.Min(buffer.Length, MaxChunkBytes)], cancellationToken);
-        BytesRead += read;
-        return read;
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
     }
+
+    public override int Read(Span<byte> buffer)
+    {
+        var count = Math.Min(Math.Min(buffer.Length, MaxChunkBytes), content.Length - _position);
+        content.AsSpan(_position, count).CopyTo(buffer);
+        _position += count;
+        BytesRead += count;
+        return count;
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => ValueTask.FromResult(Read(buffer.Span));
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => Task.FromResult(Read(buffer.AsSpan(offset, count)));
+
+    public override void Flush()
+    {
+    }
+
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }

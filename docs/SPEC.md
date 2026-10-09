@@ -558,6 +558,16 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   `INV-3`, and `INV-21` for 401.
 - Gate: a real `initData` from the project's own test bot authenticates; a byte-altered copy
   gets 401.
+- **Closed 2026-10-09**, approved by the owner. Pull requests #13 (the `initData` validator,
+  `D-028`), #14 (JWT issue and verification, `POST /api/auth/telegram`, `GET /api/users/me`, the
+  401 of `INV-21`, `INV-3` for `/api/users`, the auth column of `INV-17`, `D-029`), each with a
+  clean-context review and green CI. Gate run on `dev` at `62551c5`: build 0 warnings, 587/587
+  tests; the app in `production` mode with the test bot's token, on an empty
+  `postgres:16.15-alpine`, answered a real `initData` - which carried a `signature` field, signed
+  into its data-check-string as `D-028` assumed - with 200 and a token that `GET /api/users/me`
+  accepted with 200; copies with one byte changed in `auth_date` and in `hash` got 401,
+  `{"error":"unauthorized"}` and `WWW-Authenticate: Bearer`. The app log held no bot token and no
+  JWT, and two `WARNING` records with the reason `bad_signature`.
 
 ### PHASE-3 - Rate engine, ECB and Bank of Russia providers
 

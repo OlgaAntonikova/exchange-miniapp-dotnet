@@ -141,6 +141,8 @@ public static partial class AuthEndpoints
     /// </summary>
     public static async Task<ReadOnlyMemory<byte>?> ReadCappedAsync(Stream stream, int capBytes, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentOutOfRangeException.ThrowIfNegative(capBytes);
         var buffer = new byte[capBytes + 1];
         var length = 0;
         int read;
