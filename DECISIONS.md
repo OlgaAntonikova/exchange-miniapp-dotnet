@@ -314,3 +314,19 @@ are read, that decoding cannot be observed, and no test claims to guard it. A sn
 `ValidUntil`, the start of the day after the last day its effective date may be used, at the
 source's fixed offset (UTC+1 for the ECB, which allows no lead, UTC+3 for the Bank of Russia),
 so a cached snapshot is refused once its window closes, not only when it is fetched.
+
+### D-032 - The rate cache, the freshness guard and the routes
+
+Each source has one `RateService`. It fetches at most once per cache period whether the last
+fetch worked or not, so a dead source is not hit by every request; a caller that gives up mid-fetch
+leaves no attempt behind. The last good snapshot is served while the time since it was fetched is
+at most the source's maximum age and the moment is before its `ValidUntil` (`D-031`); otherwise
+the answer is `RatesUnavailableException` with a reason code and a `WARNING`, never a number. A
+failed fetch is logged at `ERROR` with the provider, the reason and the duration. To give each
+source its own alert on `RATE_ALERT_COOLDOWN_SECONDS`, the alert sink reads two optional event
+properties: `AlertKey`, appended to the fingerprint, and `AlertCooldownSeconds`, a positive whole
+number of seconds that replaces the default cooldown; the rate service sets both for its failures.
+`RateSources` routes USD and EUR to the ECB and RUB to the Bank of Russia, asks each source once
+per quote for only the currencies the direction needs, names the providers it used joined by `+`
+in alphabetical order, and takes the oldest snapshot time. Each source's `HttpClient` has the
+`RATE_FETCH_TIMEOUT_SECONDS` timeout and a 1 MiB response limit.

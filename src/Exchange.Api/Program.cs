@@ -4,6 +4,7 @@ using Exchange.Api.Auth;
 using Exchange.Api.Data;
 using Exchange.Api.Json;
 using Exchange.Api.Logging;
+using Exchange.Api.Rates;
 using Exchange.Api.Reference;
 using Exchange.Api.Settings;
 using Serilog;
@@ -56,6 +57,7 @@ try
     builder.Services.ConfigureHttpJsonOptions(options => ApiJson.Configure(options.SerializerOptions));
     builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddExchangeAuth();
+    builder.Services.AddExchangeRates();
     builder.Services.AddSingleton(services =>
     {
         var settings = services.GetRequiredService<AppSettings>();

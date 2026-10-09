@@ -21,6 +21,12 @@ public sealed class AlertSink : ILogEventSink
     /// <summary>Alerts waiting for delivery before new ones are dropped.</summary>
     public const int QueueCapacity = 100;
 
+    /// <summary>An event property whose value is added to the fingerprint, splitting one template into several alerts.</summary>
+    public const string KeyProperty = "AlertKey";
+
+    /// <summary>An event property holding the event's own cooldown, in whole seconds.</summary>
+    public const string CooldownSecondsProperty = "AlertCooldownSeconds";
+
     private const string SourceContextProperty = "SourceContext";
 
     private readonly Channel<Alert> _queue = Channel.CreateBounded<Alert>(new BoundedChannelOptions(QueueCapacity)
@@ -55,12 +61,22 @@ public sealed class AlertSink : ILogEventSink
 
         var source = logEvent.Properties.TryGetValue(SourceContextProperty, out var value) && value is ScalarValue { Value: string name } ? name : "app";
         var fingerprint = source + " | " + logEvent.MessageTemplate.Text;
+        if (logEvent.Properties.TryGetValue(KeyProperty, out var key) && key is ScalarValue { Value: string keyText })
+        {
+            fingerprint += " | " + keyText;
+        }
+
+        // An event may carry its own cooldown (a rate source's outage, spec 1.4); anything but a
+        // positive whole number of seconds leaves the default.
+        var cooldown = logEvent.Properties.TryGetValue(CooldownSecondsProperty, out var seconds) && seconds is ScalarValue { Value: int own } && own > 0
+            ? TimeSpan.FromSeconds(own)
+            : _cooldown;
         // Check and record under one lock: concurrent identical errors (a database going down under
         // load) must still raise one alert per cooldown.
         lock (_gate)
         {
             var now = _time.GetUtcNow();
-            if (_lastSent.TryGetValue(fingerprint, out var last) && now - last < _cooldown)
+            if (_lastSent.TryGetValue(fingerprint, out var last) && now - last < cooldown)
             {
                 return;
             }
