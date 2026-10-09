@@ -116,8 +116,8 @@ TLS. The converter therefore understands exactly one parameter, `sslmode` (`disa
 `require`, `verify-ca`, `verify-full`), given at most once, and refuses any other - `password`
 and `passfile` included - in every environment, not only in demo. For the same reason demo mode
 refuses `PGPASSFILE` beside `PGPASSWORD`; a default `~/.pgpass` cannot be seen from the
-settings, and the demo's database trusts its network and needs none. A setting the app does not understand is a
-setting it cannot be trusted to apply.
+settings, and the demo's database trusts its network and needs none. A setting the app does not
+understand is a setting it cannot be trusted to apply.
 
 ### D-017 - `.env` is read in development only, below the process environment
 
@@ -154,15 +154,16 @@ Each request is logged once by Serilog's request logging, as `HTTP <method> <rou
 <status> in <ms> ms`, with exactly the properties `method`, `route`, `status` and `duration_ms`
 (spec 4's names); the route is the endpoint's template (`/api/orders/{order_id}`), and the raw
 path is not logged at all: ASP.NET Core's request scope would add `RequestPath` (and its own
-`RequestId`) to every line of a request, so the logging setup drops both properties. A request line for a failed request (5xx, or one that ended in an
-exception) is a `WARNING`: the top-level handler has already logged the failure at `ERROR`, and a
-second `ERROR` would alert twice. For the same reason the handler, when the response has already
-started and the 500 body can no longer be sent, aborts the connection instead of rethrowing into
-the server, which would log the failure again. The request middleware is given the app's
-logger explicitly, since it otherwise writes to Serilog's static logger, outside the app's outputs
-and alerts. The whole `Microsoft.AspNetCore` category is raised to `WARNING`, a superset of the
-`Hosting.Diagnostics` category spec 4 names: its other `INFO` lines (endpoint selected, result
-written) repeat the request line and can carry paths.
+`RequestId`) to every line of a request, so the logging setup drops both properties. A request
+line for a failed request (5xx, or one that ended in an exception) is a `WARNING`: the
+top-level handler has already logged the failure at `ERROR`, and a second `ERROR` would alert
+twice. For the same reason the handler, when the response has already started and the 500 body
+can no longer be sent, aborts the connection instead of rethrowing into the server, which would
+log the failure again. The request middleware is given the app's logger explicitly, since it
+otherwise writes to Serilog's static logger, outside the app's outputs and alerts. The whole
+`Microsoft.AspNetCore` category is raised to `WARNING`, a superset of the `Hosting.Diagnostics`
+category spec 4 names: its other `INFO` lines (endpoint selected, result written) repeat the
+request line and can carry paths.
 
 ### D-020 - A failed start: one FATAL line, exit code 1
 
@@ -178,14 +179,15 @@ end of, the host that provides one.
 
 ### D-021 - Alerts: behind redaction, queued, delivered off the request path
 
-The alert sink is an output behind the redacting sink, so an alert can never carry what a log line
-could not. It queues at most 100 alerts (`AlertSink.QueueCapacity`) and drops new ones when full,
-recording the drop in Serilog's self-log, so a storm of errors cannot block a request or grow
-memory. The cooldown check and its record happen under one lock, so concurrent identical errors
-still raise one alert. If one output of the redacting sink throws, the others still receive the
-event and the failure goes to the self-log. Delivery runs in a background service; until the Telegram client exists (`PHASE-3`) it
-writes an `INFO` line naming the alert's fingerprint. A failed delivery goes to the self-log
-(stderr) only: logging it would raise another alert. In demo mode the sink is not attached.
+The alert sink is an output behind the redacting sink, so an alert can never carry what a log
+line could not. It queues at most 100 alerts (`AlertSink.QueueCapacity`) and drops new ones
+when full, recording the drop in Serilog's self-log, so a storm of errors cannot block a
+request or grow memory. The cooldown check and its record happen under one lock, so concurrent
+identical errors still raise one alert. If one output of the redacting sink throws, the others
+still receive the event and the failure goes to the self-log. Delivery runs in a background
+service; until the Telegram client exists (`PHASE-3`) it writes an `INFO` line naming the
+alert's fingerprint. A failed delivery goes to the self-log (stderr) only: logging it would
+raise another alert. In demo mode the sink is not attached.
 
 ### D-022 - Generated migrations are reviewed, not restyled
 
@@ -248,24 +250,27 @@ exist are not meaningful. `Directions.Check` returns it before looking at any fi
 ### D-028 - What the initData validator refuses beyond the signature and the age
 
 The spec fixes the HMAC check (`INV-1`) and the age (`INV-2`, with a 60-second skew). Around
-them: the data-check-string is every field except `hash` - `signature` included - sorted by key in
-byte order and joined by line feeds, as Telegram's documentation describes the HMAC method (the
-`PHASE-2` gate, with a real `initData`, is the proof); the query is parsed strictly (every segment
-`key=value` with a key, every escape `%XX`, no raw non-ASCII character (Telegram percent-encodes it), `+` as a space, the decoded bytes valid UTF-8); a field
-sent twice is refused, since which copy was signed would be ambiguous; input over 8192 characters
-is refused before parsing (a generous margin over a user object and a few short fields); the received hash must be the exact
-lower-case hex, compared in constant time; `auth_date` is plain ASCII digits; `user.id` must be a
-positive JSON integer and `first_name` a string. Every refusal carries a short reason code and
-nothing of the input; parser exceptions, which can quote it, are not chained.
+them: the data-check-string is every field except `hash` - `signature` included - sorted by key
+in byte order and joined by line feeds, as Telegram's documentation describes the HMAC method
+(the `PHASE-2` gate, with a real `initData`, is the proof); the query is parsed strictly (every
+segment `key=value` with a key, every escape `%XX`, no raw non-ASCII character (Telegram
+percent-encodes it), `+` as a space, the decoded bytes valid UTF-8); a field sent twice is
+refused, since which copy was signed would be ambiguous; input over 8192 characters is refused
+before parsing (a generous margin over a user object and a few short fields); the received hash
+must be the exact lower-case hex, compared in constant time; `auth_date` is plain ASCII digits;
+`user.id` must be a positive JSON integer and `first_name` a string. Every refusal carries a
+short reason code and nothing of the input; parser exceptions, which can quote it, are not
+chained.
 
 ### D-029 - The access token, the sign-in body, and the one 401
 
-The spec fixes HS256 and `JWT_TTL_SECONDS`. This decision fixes the claims: exactly `sub`, `iat`,
-`exp` and `aud`, where `sub` is the Telegram user id as a decimal string; `aud` is the constant `exchange-miniapp-dotnet`;
-there is no `iss` (this app is the only issuer and the key is its own) and no `nbf`. Validation
-accepts HS256 only, requires a signature, `exp` and the audience, and allows no clock skew; the
-lifetime check reads the app's `TimeProvider`, not the system clock, so expiry is tested at its
-exact second. A valid token whose subject is not plain digits, or names no user, is refused too.
+The spec fixes HS256 and `JWT_TTL_SECONDS`. This decision fixes the claims: exactly `sub`,
+`iat`, `exp` and `aud`, where `sub` is the Telegram user id as a decimal string; `aud` is the
+constant `exchange-miniapp-dotnet`; there is no `iss` (this app is the only issuer and the key is
+its own) and no `nbf`. Validation accepts HS256 only, requires a signature, `exp` and the
+audience, and allows no clock skew; the lifetime check reads the app's `TimeProvider`, not the
+system clock, so expiry is tested at its exact second. A valid token whose subject is not plain
+digits, or names no user, is refused too.
 
 `POST /api/auth/telegram` reads its body itself, up to twice `MaxInitDataChars` bytes: anything that
 is not a JSON object with an `init_data` string - an empty, oversized or malformed body included -
