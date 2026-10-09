@@ -1,5 +1,6 @@
 using System.Net;
 using Exchange.Api.Alerts;
+using Exchange.Api.Auth;
 using Exchange.Api.Data;
 using Exchange.Api.Json;
 using Exchange.Api.Logging;
@@ -54,6 +55,7 @@ try
     builder.Services.AddExchangeData();
     builder.Services.ConfigureHttpJsonOptions(options => ApiJson.Configure(options.SerializerOptions));
     builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddExchangeAuth();
     builder.Services.AddSingleton(services =>
     {
         var settings = services.GetRequiredService<AppSettings>();
@@ -99,8 +101,11 @@ try
     }
 
     app.UseRequestLogging();
+    app.UseAuthentication();
+    app.UseAuthorization();
     app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
     app.MapReferenceEndpoints();
+    app.MapAuthEndpoints();
 
     await app.RunAsync().ConfigureAwait(false);
     return ExitSuccess;

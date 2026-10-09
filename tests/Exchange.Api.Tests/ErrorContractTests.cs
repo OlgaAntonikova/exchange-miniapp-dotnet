@@ -1,14 +1,16 @@
 using System.Net;
 using System.Text.Json;
 using Exchange.Api.Logging;
+using Exchange.Api.Tests.Auth;
 using Exchange.Api.Tests.Logging;
+using Exchange.Api.Tests.Settings;
 using Shouldly;
 
 namespace Exchange.Api.Tests;
 
 /// <summary>
-/// INV-21: every error body of spec 1.10, exactly. PHASE-0 brings the 500 body; the 401, 404, 409,
-/// 422 and 503 bodies join this class with the endpoints that return them.
+/// INV-21: every error body of spec 1.10, exactly. PHASE-0 brings the 500 body and PHASE-2 the 401;
+/// the 404, 409, 422 and 503 bodies join this class with the endpoints that return them.
 /// </summary>
 public sealed class ErrorContractTests
 {
@@ -26,5 +28,28 @@ public sealed class ErrorContractTests
         body.ShouldBe(JsonSerializer.Serialize(new Dictionary<string, string> { ["error"] = "internal_error", ["request_id"] = requestId }));
         body.ShouldNotContain("boom");
         body.ShouldNotContain(RequestPipelineHarness.BotToken);
+    }
+
+    [Fact]
+    public async Task A_route_that_needs_a_token_answers_401_without_one()
+    {
+        using var factory = new TestAppFactory(TestSettings.Production());
+        using var client = factory.CreateClient();
+
+        using var response = await TelegramAuth.GetAsync(client, "/api/users/me", null);
+
+        await AuthApiTests.ShouldBeUnauthorizedAsync(response);
+    }
+
+    [Fact]
+    public async Task A_bad_init_data_answers_401()
+    {
+        using var factory = new TestAppFactory(TestSettings.Production());
+        using var client = factory.CreateClient();
+        var altered = TelegramAuth.InitData(TestSettings.BotToken, 1, "Ann", "ann", DateTimeOffset.UtcNow).Replace("Ann", "Bob", StringComparison.Ordinal);
+
+        using var response = await TelegramAuth.PostAsync(client, altered);
+
+        await AuthApiTests.ShouldBeUnauthorizedAsync(response);
     }
 }

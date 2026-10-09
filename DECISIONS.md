@@ -257,3 +257,24 @@ is refused before parsing (a generous margin over a user object and a few short 
 lower-case hex, compared in constant time; `auth_date` is plain ASCII digits; `user.id` must be a
 positive JSON integer and `first_name` a string. Every refusal carries a short reason code and
 nothing of the input; parser exceptions, which can quote it, are not chained.
+
+### D-029 - The access token, the sign-in body, and the one 401
+
+The spec fixes HS256 and `JWT_TTL_SECONDS`. This decision fixes the claims: exactly `sub`, `iat`,
+`exp` and `aud`, where `sub` is the Telegram user id as a decimal string; `aud` is the constant `exchange-miniapp-dotnet`;
+there is no `iss` (this app is the only issuer and the key is its own) and no `nbf`. Validation
+accepts HS256 only, requires a signature, `exp` and the audience, and allows no clock skew; the
+lifetime check reads the app's `TimeProvider`, not the system clock, so expiry is tested at its
+exact second. A valid token whose subject is not plain digits, or names no user, is refused too.
+
+`POST /api/auth/telegram` reads its body itself, up to twice `MaxInitDataChars` bytes: anything that
+is not a JSON object with an `init_data` string - an empty, oversized or malformed body included -
+is the 401 of `INV-21`, like a bad `initData`, rather than a framework 400 with a body the spec does
+not list. Other properties (`user_id`, `telegram_id`) are ignored (`RULE-SERVER-AUTHORITY`). In demo
+mode there is no bot token, so this route always refuses (spec 1.9). A sign-in creates the user or
+refreshes `username` and `first_name` in one `INSERT ... ON CONFLICT` statement, keeping the
+loyalty points.
+
+Every refusal - by the bearer handler's challenge or by an endpoint - writes the same body and
+`WWW-Authenticate: Bearer`, and logs one `WARNING` with a short `Reason` (a code, or the token
+library's exception type name) and nothing of the token or the input.

@@ -21,9 +21,14 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     private const string User = "postgres";
 
+    // Every test host keeps its own pool on its own database, and the suite runs them in parallel;
+    // PostgreSQL's default of 100 connections is exhausted ("53300 too many clients").
+    private const int MaxConnections = 1000;
+
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(Image)
         .WithUsername(User)
         .WithEnvironment("POSTGRES_HOST_AUTH_METHOD", "trust")
+        .WithCommand("-c", $"max_connections={MaxConnections}")
         .Build();
 
     private int _databases;
