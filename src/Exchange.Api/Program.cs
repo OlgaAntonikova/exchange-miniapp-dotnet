@@ -12,6 +12,7 @@ using Exchange.Api.Pricing;
 using Exchange.Api.Rates;
 using Exchange.Api.Reference;
 using Exchange.Api.Settings;
+using Exchange.Api.Web;
 using Serilog;
 
 const int ServePort = 8000; // spec 1.11: the port is fixed, only the address is a setting
@@ -35,6 +36,9 @@ try
     {
         Args = args,
         EnvironmentName = AppEnvironments.HostEnvironmentName(environment),
+        // The page's files beside the assembly, as the locale file is read (spec 1.7): the same
+        // files whatever directory the host starts in.
+        WebRootPath = Path.Combine(AppContext.BaseDirectory, LocaleTexts.WebRootDirectory),
     });
 
     // D-017: .env in the working directory, in development only, below the process environment.
@@ -118,9 +122,11 @@ try
     }
 
     app.UseRequestLogging();
+    app.UseFrontEndFiles(app.Environment);
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+    app.MapFrontEndPage();
     app.MapReferenceEndpoints();
     app.MapAuthEndpoints();
     app.MapDemoEndpoints(app.Services.GetRequiredService<AppSettings>());

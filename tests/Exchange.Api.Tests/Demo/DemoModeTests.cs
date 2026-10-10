@@ -76,7 +76,7 @@ public sealed class DemoModeTests(PostgresFixture database)
         var mapped = ApiContractTests.MappedRoutes(app.Factory.Services.GetRequiredService<EndpointDataSource>());
 
         mapped.ShouldBe(
-            ApiContractTests.Table.Where(row => row.Served != ApiContractTests.Served.OutsideDemo).Select(row => (row.Method, row.Route)),
+            ApiContractTests.Table.Where(row => row.Served != ApiContractTests.Served.OutsideDemo).Select(row => (row.Method, row.Route)).Concat(ApiContractTests.PageRoutes),
             ignoreOrder: true);
     }
 
@@ -145,8 +145,12 @@ public sealed class DemoModeTests(PostgresFixture database)
         // each replaced by one INFO record naming its kind and the order.
         await WaitForAsync(() => Suppressed(logs, orderId).Count >= 3);
         Suppressed(logs, orderId).ShouldBe(["new order", "client status", "operator status"], ignoreOrder: true);
+        // With today's wiring demo mode builds no Bot API client at all, so this guards against one
+        // being built later; the suppressed records above are what shows nothing was sent.
         telegram.Requests.ShouldBe(0);
-        var text = string.Join('\n', logs.Events.Select(e => e.RenderMessage(System.Globalization.CultureInfo.InvariantCulture)));
+
+        // The formatted output, every property included, as a sink writes it.
+        var text = logs.Text;
         text.ShouldNotContain("Ivan Petrov");
         text.ShouldNotContain("Rent for October");
         text.ShouldNotContain("5678951");

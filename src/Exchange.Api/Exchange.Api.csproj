@@ -18,9 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The server reads the page's locale file next to its own assembly, so a host started from
-         any directory (the migrate command included) finds it (spec 1.7). -->
-    <Content Update="wwwroot/locale/ru.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The server serves the page's files, and reads its locale file, next to its own assembly, so
+         a host started from any directory (the migrate command included) finds them (spec 1.7). -->
+    <Content Update="wwwroot/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
