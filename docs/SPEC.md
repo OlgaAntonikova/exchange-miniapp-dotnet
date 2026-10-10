@@ -581,6 +581,20 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   of Russia; with each provider in turn pointed at an unreachable URL, its last snapshot is
   served until its max age, then 503 for exactly the directions that need it, and an `ERROR`
   alert reaches the operator chat.
+- **Closed 2026-10-10**, approved by the owner. Pull requests #16 (the rate engine, `D-030`), #17
+  (the ECB and Bank of Russia providers, `D-031`), #18 (the cache, the freshness guard and the
+  currency routes, `D-032`), #19 (`POST /api/rate` with its 422 and 503 bodies, `D-033`), #20
+  (the detail field rules and `DetailFieldTests`, `D-034`), #21 (alert delivery through the Bot
+  API, `D-035`) and #22 (alert text, `D-036`), each with a clean-context review and green CI.
+  Gate run on `dev` at `7e958a8`, 1020/1020 tests, the app in `production` mode on an empty
+  `postgres:16.15-alpine`: a live quote answered 200 for each of the 14 directions, `provider`
+  `cbr+ecb` for the `RUB_WIRE` ones and `ecb` for the rest; then, with each source served once by
+  a local proxy and the proxy stopped (connection refused) under a 5-second cache and a 25-second
+  maximum age, the last snapshot was still served within the maximum age, after it the ECB outage
+  refused all 14 directions with 503 and the Bank of Russia outage exactly the 5 `RUB_WIRE` ones
+  while the other 9 answered 200, each failure was logged at `ERROR` with its provider as the
+  alert key, and the alerts reached the operator chat, which the owner confirmed; no alert
+  delivery failed, and the logs held no bot token and no JWT.
 
 ### PHASE-4 - Orders and operator bot (key milestone)
 
