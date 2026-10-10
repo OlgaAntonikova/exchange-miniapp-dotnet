@@ -10,7 +10,7 @@ namespace Exchange.Api.Tests.Settings;
 public sealed class StartupFailureTests
 {
     private const int ExitTimeoutMilliseconds = 60_000;
-    private const int ExpectedExitCode = 1;
+    internal const int ExpectedExitCode = 1;
 
     private static readonly string[] InheritedVariables =
     [
@@ -66,7 +66,9 @@ public sealed class StartupFailureTests
         output.ShouldContain("JWT_SECRET is missing");
     }
 
-    private static async Task<(int ExitCode, string Output)> RunAppAsync(Dictionary<string, string?> environment)
+    /// <summary>Runs the real app with only <paramref name="environment"/> set, in an empty working
+    /// directory, and returns its exit code and output.</summary>
+    internal static async Task<(int ExitCode, string Output)> RunAppAsync(Dictionary<string, string?> environment)
     {
         var appPath = Path.Combine(AppContext.BaseDirectory, "Exchange.Api.dll");
         File.Exists(appPath).ShouldBeTrue(appPath);

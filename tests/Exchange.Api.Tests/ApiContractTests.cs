@@ -16,9 +16,9 @@ namespace Exchange.Api.Tests;
 
 /// <summary>
 /// INV-17: every row of the API table of spec 1.10 is served with its method, path, auth
-/// requirement, success status and response property names and JSON types. Rows not yet built
-/// are listed as pending, and the list can only shrink: a pending route must not be mapped, a
-/// mapped route must be in the table, and the list is empty at the PHASE-5 gate.
+/// requirement, success status and response property names and JSON types, and a mapped route
+/// must be in the table. These tests host the app outside demo mode; the demo-only row, and the
+/// routes demo mode maps, are checked by <c>DemoModeTests</c> with the same table.
 /// </summary>
 public sealed class ApiContractTests(PostgresFixture database)
 {
@@ -108,34 +108,43 @@ public sealed class ApiContractTests(PostgresFixture database)
     private static readonly Dictionary<string, JsonValueKind> CancelledOrderShape = new(OrderShape) { ["closed_at"] = JsonValueKind.String };
 
     // Spec 1.10, row by row: method, route template, the example path requested, whether it needs a
-    // token, success status, whether the body is a list, and the shape of one object (null: not
-    // built yet).
-    private static readonly List<(string Method, string Route, string Path, bool Auth, HttpStatusCode Status, bool IsList, Dictionary<string, JsonValueKind>? Shape)> Table =
+    // token, success status, whether the body is a list, the shape of one object, and where the
+    // route is served.
+    internal static readonly List<(string Method, string Route, string Path, bool Auth, HttpStatusCode Status, bool IsList, Dictionary<string, JsonValueKind> Shape, Served Served)> Table =
     [
-        ("GET", "/healthz", "/healthz", false, HttpStatusCode.OK, false, HealthShape),
-        ("GET", "/api/cities", "/api/cities", false, HttpStatusCode.OK, true, CityShape),
-        ("GET", "/api/banks", "/api/banks", false, HttpStatusCode.OK, true, BankShape),
-        ("GET", "/api/usdt-networks", "/api/usdt-networks", false, HttpStatusCode.OK, true, NetworkShape),
-        ("GET", "/api/directions", "/api/directions", false, HttpStatusCode.OK, true, DirectionShape),
-        ("POST", "/api/auth/telegram", "/api/auth/telegram", false, HttpStatusCode.OK, false, TokenShape),
-        ("POST", "/api/auth/demo", "/api/auth/demo", false, HttpStatusCode.OK, false, null),
-        ("GET", "/api/users/me", "/api/users/me", true, HttpStatusCode.OK, false, MeShape),
-        ("POST", "/api/rate", "/api/rate", true, HttpStatusCode.OK, false, QuoteShape),
-        ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, OrderShape),
-        ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, OrderShape),
-        ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, OrderShape),
-        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, CancelledOrderShape),
-        ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, WebhookShape),
+        ("GET", "/healthz", "/healthz", false, HttpStatusCode.OK, false, HealthShape, Served.Everywhere),
+        ("GET", "/api/cities", "/api/cities", false, HttpStatusCode.OK, true, CityShape, Served.Everywhere),
+        ("GET", "/api/banks", "/api/banks", false, HttpStatusCode.OK, true, BankShape, Served.Everywhere),
+        ("GET", "/api/usdt-networks", "/api/usdt-networks", false, HttpStatusCode.OK, true, NetworkShape, Served.Everywhere),
+        ("GET", "/api/directions", "/api/directions", false, HttpStatusCode.OK, true, DirectionShape, Served.Everywhere),
+        ("POST", "/api/auth/telegram", "/api/auth/telegram", false, HttpStatusCode.OK, false, TokenShape, Served.Everywhere),
+        ("POST", "/api/auth/demo", "/api/auth/demo", false, HttpStatusCode.OK, false, TokenShape, Served.DemoOnly),
+        ("GET", "/api/users/me", "/api/users/me", true, HttpStatusCode.OK, false, MeShape, Served.Everywhere),
+        ("POST", "/api/rate", "/api/rate", true, HttpStatusCode.OK, false, QuoteShape, Served.Everywhere),
+        ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, OrderShape, Served.Everywhere),
+        ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, OrderShape, Served.Everywhere),
+        ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, OrderShape, Served.Everywhere),
+        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, CancelledOrderShape, Served.Everywhere),
+        ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, WebhookShape, Served.OutsideDemo),
     ];
 
+    /// <summary>Where a route of the table is mapped.</summary>
+    internal enum Served
+    {
+        Everywhere,
+        OutsideDemo,
+        DemoOnly,
+    }
+
     public static TheoryData<string, string> Built() =>
-        [.. Table.Where(row => row.Shape is not null).Select(row => (row.Method, row.Route))];
+        [.. OutsideDemo().Select(row => (row.Method, row.Route))];
 
     public static TheoryData<string, string> BuiltWithAuth() =>
-        [.. Table.Where(row => row.Shape is not null && row.Auth).Select(row => (row.Method, row.Route))];
+        [.. OutsideDemo().Where(row => row.Auth).Select(row => (row.Method, row.Route))];
 
-    public static TheoryData<string, string> Pending() =>
-        [.. Table.Where(row => row.Shape is null).Select(row => (row.Method, row.Route))];
+    // The rows an app outside demo mode maps.
+    private static IEnumerable<(string Method, string Route, string Path, bool Auth, HttpStatusCode Status, bool IsList, Dictionary<string, JsonValueKind> Shape, Served Served)> OutsideDemo() =>
+        Table.Where(row => row.Served != Served.DemoOnly);
 
     [Theory]
     [MemberData(nameof(Built))]
@@ -183,6 +192,13 @@ public sealed class ApiContractTests(PostgresFixture database)
 
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
+        await ShouldMatchRowAsync(response, method, route);
+    }
+
+    /// <summary>The response answers the table row of <paramref name="method"/> and <paramref name="route"/>: its status and its shape.</summary>
+    internal static async Task ShouldMatchRowAsync(HttpResponseMessage response, string method, string route)
+    {
+        var row = Table.Single(r => r.Method == method && r.Route == route);
         response.StatusCode.ShouldBe(row.Status);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var objects = row.IsList ? [.. document.RootElement.EnumerateArray()] : new List<JsonElement> { document.RootElement };
@@ -190,7 +206,7 @@ public sealed class ApiContractTests(PostgresFixture database)
         foreach (var item in objects)
         {
             item.ValueKind.ShouldBe(JsonValueKind.Object);
-            item.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.ValueKind).ShouldBe(row.Shape!, ignoreOrder: true);
+            item.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.ValueKind).ShouldBe(row.Shape, ignoreOrder: true);
             foreach (var list in item.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Array))
             {
                 list.Value.EnumerateArray().ShouldAllBe(element => element.ValueKind == JsonValueKind.String, list.Name); // field-name lists
@@ -211,20 +227,6 @@ public sealed class ApiContractTests(PostgresFixture database)
         await AuthApiTests.ShouldBeUnauthorizedAsync(response);
     }
 
-    [Theory]
-    [MemberData(nameof(Pending))]
-    public async Task A_pending_row_is_not_mapped_yet(string method, string route)
-    {
-        var row = Table.Single(r => r.Method == method && r.Route == route);
-        using var factory = new TestAppFactory(await EnvironmentAsync(), services: FakeSources.Replace());
-        using var client = factory.CreateClient();
-
-        using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), row.Path), TestContext.Current.CancellationToken);
-
-        // Once a pending route answers, it has been built: move it to the built rows with its shape.
-        response.StatusCode.ShouldBe(HttpStatusCode.NotFound, $"{method} {route} is mapped; give it its shape in the table");
-    }
-
     [Fact]
     public async Task Every_mapped_route_is_a_built_row_of_the_table()
     {
@@ -232,9 +234,8 @@ public sealed class ApiContractTests(PostgresFixture database)
         using var client = factory.CreateClient();
 
         var mapped = MappedRoutes(factory.Services.GetRequiredService<EndpointDataSource>());
-        var built = Table.Where(row => row.Shape is not null).Select(row => (row.Method, row.Route)).ToHashSet();
 
-        mapped.ShouldBe(built, ignoreOrder: true);
+        mapped.ShouldBe(OutsideDemo().Select(row => (row.Method, row.Route)), ignoreOrder: true);
     }
 
     [Fact]
@@ -253,7 +254,7 @@ public sealed class ApiContractTests(PostgresFixture database)
     // Every (method, route) the app maps. A route without method metadata (app.Map, a fallback)
     // answers every method: "*" can match no row of the table, so it fails the comparison instead
     // of disappearing.
-    private static HashSet<(string Method, string Route)> MappedRoutes(EndpointDataSource source) =>
+    internal static HashSet<(string Method, string Route)> MappedRoutes(EndpointDataSource source) =>
         source.Endpoints.OfType<RouteEndpoint>()
             .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
                 .Select(method => (method, "/" + endpoint.RoutePattern.RawText!.TrimStart('/'))))
