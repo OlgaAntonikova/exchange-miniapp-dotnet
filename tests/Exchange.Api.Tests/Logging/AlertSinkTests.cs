@@ -1,4 +1,5 @@
 using Exchange.Api.Alerts;
+using Exchange.Api.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Serilog.Events;
 using Serilog.Parsing;
@@ -22,7 +23,7 @@ public sealed class AlertSinkTests
         sink.Emit(Event(level, "Rate fetch failed for {Provider}", "ecb"));
 
         sink.Alerts.TryRead(out var alert).ShouldBeTrue();
-        alert!.Text.ShouldBe("Rate fetch failed for \"ecb\"");
+        alert!.Text.ShouldBe("Rate fetch failed for ecb"); // values as written, not quoted
         alert.Fingerprint.ShouldBe("Exchange.Api.Rates | Rate fetch failed for {Provider}");
     }
 
@@ -145,6 +146,73 @@ public sealed class AlertSinkTests
         sink.Emit(Event(LogEventLevel.Error, "Rate fetch failed for {Provider}", "ecb", (AlertSink.CooldownSecondsProperty, value)));
 
         Drain(sink).Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public void Numbers_and_other_values_are_rendered_plainly()
+    {
+        var sink = new AlertSink(new FakeTimeProvider(), Cooldown);
+        var parsed = Parser.Parse("Rate fetch {Provider} failed: {Reason} after {DurationMs} ms");
+        sink.Emit(new LogEvent(DateTimeOffset.UtcNow, LogEventLevel.Error, null, parsed,
+        [
+            new LogEventProperty("Provider", new ScalarValue("cbr")),
+            new LogEventProperty("Reason", new ScalarValue("timeout")),
+            new LogEventProperty("DurationMs", new ScalarValue(2033L)),
+        ]));
+
+        sink.Alerts.TryRead(out var alert).ShouldBeTrue();
+        alert!.Text.ShouldBe("Rate fetch cbr failed: timeout after 2033 ms");
+    }
+
+    [Fact]
+    public void An_exception_adds_its_type_on_a_line_of_its_own_and_not_its_message()
+    {
+        var sink = new AlertSink(new FakeTimeProvider(), Cooldown);
+        var parsed = Parser.Parse("Unhandled exception in {Method} {Route}");
+        sink.Emit(new LogEvent(DateTimeOffset.UtcNow, LogEventLevel.Error, new InvalidOperationException("details stay in the log"), parsed,
+        [
+            new LogEventProperty("Method", new ScalarValue("POST")),
+            new LogEventProperty("Route", new ScalarValue("/api/rate")),
+        ]));
+
+        sink.Alerts.TryRead(out var alert).ShouldBeTrue();
+        alert!.Text.ShouldBe("Unhandled exception in POST /api/rate\nInvalidOperationException");
+    }
+
+    [Fact]
+    public void A_property_missing_from_the_event_keeps_its_placeholder()
+    {
+        var sink = new AlertSink(new FakeTimeProvider(), Cooldown);
+        sink.Emit(new LogEvent(DateTimeOffset.UtcNow, LogEventLevel.Error, null, Parser.Parse("Lost {Something}"), []));
+
+        sink.Alerts.TryRead(out var alert).ShouldBeTrue();
+        alert!.Text.ShouldBe("Lost {Something}");
+    }
+
+    [Fact]
+    public void A_secret_in_a_rendered_value_reaches_the_alert_masked()
+    {
+        // The app's pipeline: the alert sink renders the template itself, so it must be reading the
+        // redacted event. A bot token inside an ordinary property is masked by pattern.
+        var sink = new AlertSink(new FakeTimeProvider(), Cooldown);
+        using (var logger = LoggingSetup.Configure(new Serilog.LoggerConfiguration(), "Information", new CapturingSink(), sink).CreateLogger())
+        {
+            logger.Error("Delivery to {Endpoint} failed", "https://api.telegram.org/bot" + RequestPipelineHarness.BotToken + "/sendMessage");
+        }
+
+        sink.Alerts.TryRead(out var alert).ShouldBeTrue();
+        alert!.Text.ShouldContain(LogRedactor.Mask);
+        alert.Text.ShouldNotContain(RequestPipelineHarness.BotToken);
+    }
+
+    [Fact]
+    public void A_formatted_placeholder_keeps_its_format()
+    {
+        var sink = new AlertSink(new FakeTimeProvider(), Cooldown);
+        sink.Emit(new LogEvent(DateTimeOffset.UtcNow, LogEventLevel.Error, null, Parser.Parse("Took {Seconds:0.00} s"), [new LogEventProperty("Seconds", new ScalarValue(1.5m))]));
+
+        sink.Alerts.TryRead(out var alert).ShouldBeTrue();
+        alert!.Text.ShouldBe("Took 1.50 s");
     }
 
     private static List<Alert> Drain(AlertSink sink)

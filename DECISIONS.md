@@ -390,3 +390,15 @@ holds the bot token, so keeping it out of the path removes one way to leak it (t
 also raised to `Warning`, spec 4). What the factory's handler rotation gave - fresh DNS for a
 long-lived client - is kept by giving each client a `SocketsHttpHandler` whose pooled
 connections live 15 minutes (the handler's default is forever).
+
+### D-036 - What an alert says
+
+An alert reads as a message, not a log line. Its first line is the `alert_header` text of
+`wwwroot/locale/ru.json` (spec 1.7: the server takes every text it produces from that file), so
+the operator tells an alert apart from the order messages that share the chat in `PHASE-4`. Then
+comes the log record's message with each value as written: Serilog's own rendering quotes strings
+(`"ecb"`), which is noise in a chat, so the alert sink renders the template itself, after
+redaction. If the record has an exception, only its type follows, on its own line - the type of
+the original exception, which the redacting sink keeps beside its masked stand-in. The exception's
+message stays in the log: for a failure with a reason code the alert already says it, and for any
+other it is where a secret would be most likely to hide.

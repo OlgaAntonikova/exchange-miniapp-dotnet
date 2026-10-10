@@ -88,6 +88,8 @@ public sealed class RateFreshnessTests
         await Should.ThrowAsync<RatesUnavailableException>(() => CurrentAsync(service));
         alerts.Alerts.TryRead(out var alert).ShouldBeTrue();
         alert!.Fingerprint.ShouldEndWith(" | cbr");
+        alert.Text.ShouldStartWith("Rate fetch cbr failed: timeout after ");
+        alert.Text.ShouldEndWith(" ms\nRateProviderException"); // the real type, not the redaction wrapper
 
         _time.Advance(defaultCooldown); // past the default cooldown, inside the rate one
         await Should.ThrowAsync<RatesUnavailableException>(() => CurrentAsync(service));

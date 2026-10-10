@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Exchange.Api.Alerts;
+using Exchange.Api.Locale;
 using Exchange.Api.Settings;
 using Exchange.Api.Tests.Rates;
 using Exchange.Api.Tests.Settings;
@@ -16,6 +17,9 @@ namespace Exchange.Api.Tests.Logging;
 public sealed class TelegramAlertChannelTests
 {
     private const long OperatorChatId = -1001234;
+    private const string Header = "Alert header";
+
+    private static readonly LocaleTexts Texts = LocaleTexts.Load("{\"alert_header\": \"" + Header + "\"}", [LocaleKeys.AlertHeader]);
 
     private static readonly Alert Sample = new("Exchange.Api.Rates | Rate fetch {Provider} failed", "Rate fetch \"cbr\" failed: timeout", DateTimeOffset.UnixEpoch);
 
@@ -32,7 +36,7 @@ public sealed class TelegramAlertChannelTests
         using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(TestContext.Current.CancellationToken));
         body.RootElement.EnumerateObject().Select(p => p.Name).ShouldBe(["chat_id", "text", "disable_web_page_preview"], ignoreOrder: true);
         body.RootElement.GetProperty("chat_id").GetInt64().ShouldBe(OperatorChatId);
-        body.RootElement.GetProperty("text").GetString().ShouldBe(Sample.Text);
+        body.RootElement.GetProperty("text").GetString().ShouldBe(Header + "\n" + Sample.Text); // the header says what the message is
         body.RootElement.GetProperty("disable_web_page_preview").GetBoolean().ShouldBeTrue();
     }
 
@@ -55,14 +59,14 @@ public sealed class TelegramAlertChannelTests
     {
         var http = Answering(HttpStatusCode.OK);
         var emoji = char.ConvertFromUtf32(0x1F600);
-        var cutAt = 4096 - "\n[truncated]".Length;
+        var cutAt = 4096 - "\n[truncated]".Length - (Header.Length + 1);
         var text = new string('x', cutAt - 1) + emoji + new string('x', 100); // the pair spans the cut
 
         await Channel(http).SendAsync(Sample with { Text = text }, TestContext.Current.CancellationToken);
 
         using var body = JsonDocument.Parse(await http.Requests.Single().Content!.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var sent = body.RootElement.GetProperty("text").GetString()!;
-        sent.ShouldBe(new string('x', cutAt - 1) + "\n[truncated]");
+        sent.ShouldBe(Header + "\n" + new string('x', cutAt - 1) + "\n[truncated]");
     }
 
     [Fact]
@@ -70,10 +74,12 @@ public sealed class TelegramAlertChannelTests
     {
         var http = Answering(HttpStatusCode.OK);
 
-        await Channel(http).SendAsync(Sample with { Text = new string('x', 4096) }, TestContext.Current.CancellationToken);
+        var fits = new string('x', TelegramAlertChannel.MessageMaxChars - (Header.Length + 1));
+
+        await Channel(http).SendAsync(Sample with { Text = fits }, TestContext.Current.CancellationToken);
 
         using var body = JsonDocument.Parse(await http.Requests.Single().Content!.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        body.RootElement.GetProperty("text").GetString().ShouldBe(new string('x', 4096));
+        body.RootElement.GetProperty("text").GetString().ShouldBe(Header + "\n" + fits);
     }
 
     [Theory]
@@ -139,6 +145,6 @@ public sealed class TelegramAlertChannelTests
         new(_ => new HttpResponseMessage(status) { Content = new StringContent("{\"ok\":true}") });
 
 #pragma warning disable CA2000 // the client owns the handler; both live as long as the test
-    private static TelegramAlertChannel Channel(StubHttp http) => new(new HttpClient(http), new Secret(TestSettings.BotToken), OperatorChatId);
+    private static TelegramAlertChannel Channel(StubHttp http) => new(new HttpClient(http), new Secret(TestSettings.BotToken), OperatorChatId, Texts);
 #pragma warning restore CA2000
 }

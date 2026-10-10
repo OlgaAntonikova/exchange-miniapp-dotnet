@@ -143,7 +143,7 @@ public sealed class RequestLoggingTests
     }
 
     [Fact]
-    public async Task The_error_reaches_the_alert_queue_redacted()
+    public async Task The_error_reaches_the_alert_queue_with_its_type_and_without_its_message()
     {
         await using var harness = await RequestPipelineHarness.StartAsync();
 
@@ -151,8 +151,9 @@ public sealed class RequestLoggingTests
 
         harness.Alerts.Alerts.TryRead(out var alert).ShouldBeTrue();
         alert!.Text.ShouldContain("/boom");
+        alert.Text.ShouldEndWith("\nInvalidOperationException"); // the type; the message, which held the token, stays in the log
         alert.Text.ShouldNotContain(RequestPipelineHarness.BotToken);
-        alert.Text.ShouldContain(LogRedactor.Mask);
+        alert.Text.ShouldNotContain("boom failed with");
         harness.Alerts.Alerts.TryRead(out _).ShouldBeFalse();
     }
 
