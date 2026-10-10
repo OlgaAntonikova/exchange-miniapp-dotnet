@@ -98,17 +98,17 @@ public sealed class BotWebhookTests(PostgresFixture database)
         client.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await app.ScalarAsync($"SELECT status FROM orders WHERE id = {id}")).ShouldBe("PENDING");
         (await app.ScalarAsync($"SELECT count(*) FROM order_status_history WHERE order_id = {id}")).ShouldBe(1L);
-        bot.Answers.Count.ShouldBe(2);
+        bot.Answers.Select(a => a.Notice).ShouldBe([Text("press_not_allowed"), Text("press_not_allowed")]);
         logs.Events.Count(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.StartsWith("Button press refused", StringComparison.Ordinal)).ShouldBe(2);
     }
 
     [Theory]
-    [InlineData("order:{id}:DONE")]
-    [InlineData("order:{id}")]
-    [InlineData("other:{id}:CONFIRMED")]
-    [InlineData("order:{id}:COMPLETED")] // skips a status
-    [InlineData("order:99999:CONFIRMED")] // no such order
-    public async Task A_press_with_data_that_names_no_allowed_move_changes_nothing(string data)
+    [InlineData("order:{id}:DONE", "press_not_allowed")]
+    [InlineData("order:{id}", "press_not_allowed")]
+    [InlineData("other:{id}:CONFIRMED", "press_not_allowed")]
+    [InlineData("order:{id}:COMPLETED", "press_outdated")] // skips a status
+    [InlineData("order:99999:CONFIRMED", "press_outdated")] // no such order
+    public async Task A_press_with_data_that_names_no_allowed_move_changes_nothing(string data, string answer)
     {
         var bot = new NotificationTests.ScriptedBot([]);
         await using var app = await AppAsync(bot);
@@ -118,7 +118,7 @@ public sealed class BotWebhookTests(PostgresFixture database)
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await app.ScalarAsync($"SELECT status FROM orders WHERE id = {id}")).ShouldBe("PENDING");
-        bot.Answers.ShouldHaveSingleItem();
+        bot.Answers.ShouldHaveSingleItem().Notice.ShouldBe(Text(answer));
         await Task.Delay(300, TestContext.Current.CancellationToken);
         bot.Sent.ShouldNotContain(m => m.ChatId == ClientId); // nobody is told of a change that did not happen
     }
@@ -137,7 +137,7 @@ public sealed class BotWebhookTests(PostgresFixture database)
 
         again.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await app.ScalarAsync($"SELECT count(*) FROM order_status_history WHERE order_id = {id} AND to_status = 'CONFIRMED'")).ShouldBe(1L);
-        bot.Answers.Count.ShouldBe(2);
+        bot.Answers.Select(a => a.Notice).ShouldBe([Text("status_CONFIRMED"), Text("press_outdated")]);
         await Task.Delay(300, TestContext.Current.CancellationToken);
         bot.Sent.Count(m => m.ChatId == ClientId).ShouldBe(1); // only the first press told the client
     }
@@ -158,6 +158,13 @@ public sealed class BotWebhookTests(PostgresFixture database)
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await app.ScalarAsync($"SELECT status FROM orders WHERE id = {id}")).ShouldBe("PENDING");
+    }
+
+    // The shipped text for a key, as the operator sees it.
+    private static string Text(string key)
+    {
+        var path = System.IO.Path.Combine(Repository.RepositoryRoot.Path, "src", "Exchange.Api", "wwwroot", "locale", "ru.json");
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))![key];
     }
 
     internal static string Press(long presser, string data) => JsonSerializer.Serialize(new Dictionary<string, object>

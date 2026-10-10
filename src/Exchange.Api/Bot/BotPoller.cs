@@ -6,8 +6,8 @@ namespace Exchange.Api.Bot;
 /// Development only (spec 7, PHASE-4): receives the bot's updates by long polling instead of the
 /// webhook, which needs a public HTTPS address a development machine does not have. Started with
 /// <c>dotnet run -- poll</c> beside the app, it removes any registered webhook first - Telegram
-/// refuses <c>getUpdates</c> while one is set - so it must never run against the production bot,
-/// and it refuses demo mode, which talks to no Telegram (spec 1.9). Each update goes, in a scope of
+/// refuses <c>getUpdates</c> while one is set - so it refuses <c>APP_ENV=production</c>, where it
+/// would remove the real bot's webhook, and demo mode, which talks to no Telegram (spec 1.9). Each update goes, in a scope of
 /// its own, to the same <see cref="BotUpdates"/> the webhook uses.
 /// </summary>
 public sealed partial class BotPoller(IBotClient bot, IServiceScopeFactory scopes, AppSettings settings, TimeProvider time, ILogger<BotPoller> logger) : BackgroundService
@@ -24,9 +24,11 @@ public sealed partial class BotPoller(IBotClient bot, IServiceScopeFactory scope
     /// <inheritdoc />
     public override Task StartAsync(CancellationToken cancellationToken)
     {
-        if (settings.Environment == AppEnvironment.Demo)
+        // Development only: demo mode talks to no Telegram, and in production the poller would
+        // remove the real bot's webhook.
+        if (settings.Environment is AppEnvironment.Demo or AppEnvironment.Production)
         {
-            throw new InvalidOperationException("the bot poller does not run in demo mode");
+            throw new InvalidOperationException("the bot poller runs only in development and test, not in " + settings.Environment.ToString().ToLowerInvariant());
         }
 
         return base.StartAsync(cancellationToken);

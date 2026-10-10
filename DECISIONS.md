@@ -487,5 +487,7 @@ Telegram does not deliver it again. The route is not mapped in demo mode. `dotne
 starts the app as usual plus the poller, which removes the webhook first (Telegram refuses
 `getUpdates` while one is set), long-polls for button presses with a client that outlasts the
 25-second wait, moves past each update before handling it so a failing one is not fetched
-forever, pauses 5 s after a failed poll, and refuses demo mode. It must never run against the
-production bot.
+forever, pauses 5 s after a failed poll, and refuses demo mode. It refuses
+`APP_ENV=production`, so it can never remove the production bot's webhook. Once a change is
+committed, the client's message and the press's answer no longer depend on the request's
+cancellation.
