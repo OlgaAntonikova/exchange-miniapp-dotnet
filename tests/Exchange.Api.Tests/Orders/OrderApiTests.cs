@@ -264,10 +264,10 @@ public sealed class OrderApiTests(PostgresFixture database)
         private readonly string _connectionString;
         private readonly Dictionary<long, string> _tokens = [];
 
-        public OrderApp(Dictionary<string, string?> environment, bool ecbWorks = true, Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>? services = null)
+        public OrderApp(Dictionary<string, string?> environment, bool ecbWorks = true, Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>? services = null, Logging.CapturingSink? logs = null)
         {
             _connectionString = DatabaseUrl.Convert(environment["DATABASE_URL"]!).ConnectionString!.Reveal();
-            _factory = new TestAppFactory(environment, services: collection =>
+            _factory = new TestAppFactory(environment, logs, services: collection =>
             {
                 FakeSources.Replace(ecbWorks)(collection);
                 services?.Invoke(collection);

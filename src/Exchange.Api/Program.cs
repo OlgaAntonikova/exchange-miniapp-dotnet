@@ -62,6 +62,7 @@ try
     builder.Services.AddExchangeAuth();
     builder.Services.AddExchangeRates();
     builder.Services.AddScoped<Pricer>();
+    builder.Services.AddScoped<OrderTransitions>();
 
     // The page's own locale file, copied beside the assembly, read once; a missing key fails the
     // start (spec 1.7).

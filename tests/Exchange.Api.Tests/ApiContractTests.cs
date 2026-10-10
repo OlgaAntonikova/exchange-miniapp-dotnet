@@ -103,6 +103,8 @@ public sealed class ApiContractTests(PostgresFixture database)
         ["details"] = JsonValueKind.Object,
     };
 
+    private static readonly Dictionary<string, JsonValueKind> CancelledOrderShape = new(OrderShape) { ["closed_at"] = JsonValueKind.String };
+
     // Spec 1.10, row by row: method, route template, the example path requested, whether it needs a
     // token, success status, whether the body is a list, and the shape of one object (null: not
     // built yet).
@@ -120,7 +122,7 @@ public sealed class ApiContractTests(PostgresFixture database)
         ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, OrderShape),
         ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, OrderShape),
         ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, OrderShape),
-        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, null),
+        ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, CancelledOrderShape),
         ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, null),
     ];
 
@@ -160,7 +162,7 @@ public sealed class ApiContractTests(PostgresFixture database)
         {
             var token = await TelegramAuth.SignInAsync(client, InitData());
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            if (route.StartsWith(OrdersRoute, StringComparison.Ordinal) && method == "GET")
+            if (route.StartsWith(OrdersRoute, StringComparison.Ordinal) && (method == "GET" || route.EndsWith("/cancel", StringComparison.Ordinal)))
             {
                 // The caller's first order, which is order 1 in a fresh database.
                 using var create = new HttpRequestMessage(HttpMethod.Post, OrdersRoute) { Content = OrderBody() };
