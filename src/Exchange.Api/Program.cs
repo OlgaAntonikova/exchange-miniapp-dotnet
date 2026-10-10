@@ -3,6 +3,7 @@ using Exchange.Api.Alerts;
 using Exchange.Api.Auth;
 using Exchange.Api.Bot;
 using Exchange.Api.Data;
+using Exchange.Api.Demo;
 using Exchange.Api.Json;
 using Exchange.Api.Locale;
 using Exchange.Api.Logging;
@@ -122,6 +123,7 @@ try
     app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
     app.MapReferenceEndpoints();
     app.MapAuthEndpoints();
+    app.MapDemoEndpoints(app.Services.GetRequiredService<AppSettings>());
     app.MapRateEndpoints();
     app.MapOrderEndpoints();
     app.MapBotEndpoints(app.Services.GetRequiredService<AppSettings>());

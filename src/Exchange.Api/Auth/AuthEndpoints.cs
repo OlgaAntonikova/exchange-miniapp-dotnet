@@ -81,15 +81,8 @@ public static partial class AuthEndpoints
                 return Refusal(refused.Reason);
             }
 
-            // One statement, so two sign-ins at once cannot both insert; the name is refreshed on
-            // every sign-in, the loyalty points are kept.
             var user = validated.User;
-            await db.Database.ExecuteSqlAsync(
-                $"""
-                INSERT INTO users (telegram_id, username, first_name) VALUES ({user.Id}, {user.Username}, {user.FirstName})
-                ON CONFLICT (telegram_id) DO UPDATE SET username = excluded.username, first_name = excluded.first_name
-                """,
-                cancellationToken).ConfigureAwait(false);
+            await UpsertUserAsync(db, user.Id, user.Username, user.FirstName, cancellationToken).ConfigureAwait(false);
             return Results.Ok(tokens.Issue(user.Id));
         });
 
@@ -100,6 +93,21 @@ public static partial class AuthEndpoints
         }).RequireAuthorization();
 
         return app;
+    }
+
+    /// <summary>
+    /// Creates the user or refreshes their names, keeping their loyalty points: one statement, so two
+    /// sign-ins at once cannot both insert.
+    /// </summary>
+    public static async Task UpsertUserAsync(ExchangeDbContext db, long telegramId, string? username, string? firstName, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        await db.Database.ExecuteSqlAsync(
+            $"""
+            INSERT INTO users (telegram_id, username, first_name) VALUES ({telegramId}, {username}, {firstName})
+            ON CONFLICT (telegram_id) DO UPDATE SET username = excluded.username, first_name = excluded.first_name
+            """,
+            cancellationToken).ConfigureAwait(false);
     }
 
     // The initData of a {"init_data": "<string>"} body, read up to the cap; null with the reason

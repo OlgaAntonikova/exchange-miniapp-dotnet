@@ -491,3 +491,17 @@ forever, pauses 5 s after a failed poll, and refuses demo mode. It refuses
 `APP_ENV=production`, so it can never remove the production bot's webhook. Once a change is
 committed, the client's message and the press's answer no longer depend on the request's
 cancellation.
+
+### D-042 - The demo sign-in and how demo mode is checked
+
+`POST /api/auth/demo` exists only when `APP_ENV=demo`: outside demo mode the route is not mapped,
+so it answers the ordinary 404 and touches nothing (`INV-15`). It needs no body. It signs the
+browser in as one fixed demo user, Telegram id 100 with the first name `Demo` and no username,
+created on the first call and the same user on every later one, with the same upsert as the
+Telegram sign-in; the token is the one `POST /api/auth/telegram` issues, under demo mode's random
+key. Each sign-in is logged at `INFO`. The API table in `ApiContractTests` records where each row
+is served (everywhere, outside demo, demo only), so no row is left pending: the contract tests
+host the app outside demo mode, and `DemoModeTests` checks the demo row's shape and that demo mode
+maps exactly the rows served there. The demo refusals of `INV-16` are checked on the real process,
+as `docker compose` starts it, because the in-memory host does not surface a failed start: one
+`FATAL` line naming the variable and never its value, then exit code 1 (`D-020`).
