@@ -85,6 +85,24 @@ public sealed class ApiContractTests(PostgresFixture database)
         ["rate_taken_at"] = JsonValueKind.String,
     };
 
+    private static readonly Dictionary<string, JsonValueKind> OrderShape = new()
+    {
+        ["id"] = JsonValueKind.Number,
+        ["status"] = JsonValueKind.String,
+        ["give"] = JsonValueKind.String,
+        ["receive"] = JsonValueKind.String,
+        ["amount_give"] = JsonValueKind.String,
+        ["amount_receive"] = JsonValueKind.String,
+        ["base_rate"] = JsonValueKind.String,
+        ["effective_rate"] = JsonValueKind.String,
+        ["markup_percent"] = JsonValueKind.Object,
+        ["provider"] = JsonValueKind.String,
+        ["rate_taken_at"] = JsonValueKind.String,
+        ["created_at"] = JsonValueKind.String,
+        ["closed_at"] = JsonValueKind.Null, // a new order is open
+        ["details"] = JsonValueKind.Object,
+    };
+
     // Spec 1.10, row by row: method, route template, the example path requested, whether it needs a
     // token, success status, whether the body is a list, and the shape of one object (null: not
     // built yet).
@@ -99,9 +117,9 @@ public sealed class ApiContractTests(PostgresFixture database)
         ("POST", "/api/auth/demo", "/api/auth/demo", false, HttpStatusCode.OK, false, null),
         ("GET", "/api/users/me", "/api/users/me", true, HttpStatusCode.OK, false, MeShape),
         ("POST", "/api/rate", "/api/rate", true, HttpStatusCode.OK, false, QuoteShape),
-        ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, null),
-        ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, null),
-        ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, null),
+        ("POST", "/api/orders", "/api/orders", true, HttpStatusCode.Created, false, OrderShape),
+        ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, OrderShape),
+        ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, OrderShape),
         ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, null),
         ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, null),
     ];
@@ -133,9 +151,23 @@ public sealed class ApiContractTests(PostgresFixture database)
             request.Content = JsonContent.Create(new Dictionary<string, string> { ["give"] = "USD_CASH", ["receive"] = "EUR_WIRE", ["amount_give"] = "100" });
         }
 
+        if (route == OrdersRoute && method == "POST")
+        {
+            request.Content = OrderBody();
+        }
+
         if (row.Auth)
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await TelegramAuth.SignInAsync(client, InitData()));
+            var token = await TelegramAuth.SignInAsync(client, InitData());
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            if (route.StartsWith(OrdersRoute, StringComparison.Ordinal) && method == "GET")
+            {
+                // The caller's first order, which is order 1 in a fresh database.
+                using var create = new HttpRequestMessage(HttpMethod.Post, OrdersRoute) { Content = OrderBody() };
+                create.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var created = await client.SendAsync(create, TestContext.Current.CancellationToken);
+                created.StatusCode.ShouldBe(HttpStatusCode.Created);
+            }
         }
 
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -218,6 +250,16 @@ public sealed class ApiContractTests(PostgresFixture database)
 
     private const string SignInRoute = "/api/auth/telegram";
     private const string RateRoute = "/api/rate";
+    private const string OrdersRoute = "/api/orders";
+
+    private static JsonContent OrderBody() => JsonContent.Create(new Dictionary<string, string>
+    {
+        ["give"] = "USD_CASH",
+        ["receive"] = "EUR_WIRE",
+        ["amount_give"] = "100",
+        ["iban"] = "ME25505000012345678951",
+        ["recipient_name"] = "Ivan Petrov",
+    });
 
     private static string InitData() =>
         TelegramAuth.InitData(TestSettings.BotToken, 7_000_003, "Ivan", "ivan_p", DateTimeOffset.UtcNow.AddSeconds(-5));

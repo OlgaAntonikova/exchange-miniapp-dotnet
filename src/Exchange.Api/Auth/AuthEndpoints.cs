@@ -95,17 +95,8 @@ public static partial class AuthEndpoints
 
         api.MapGet("/users/me", async (HttpContext http, ExchangeDbContext db) =>
         {
-            // A valid signature on a subject that is not a user id, or a user who is gone, is
-            // still no identity (RULE-SERVER-AUTHORITY).
-            if (AccessTokens.TelegramId(http.User) is not { } telegramId)
-            {
-                return Refusal("bad_subject");
-            }
-
-            var me = await db.Users.AsNoTracking().Where(user => user.TelegramId == telegramId)
-                .Select(user => new MeOut(user.TelegramId, user.Username, user.FirstName, user.LoyaltyPoints))
-                .SingleOrDefaultAsync(http.RequestAborted).ConfigureAwait(false);
-            return me is null ? Refusal("unknown_user") : Results.Ok(me);
+            var (me, refusal) = await CallerAsync(http, db).ConfigureAwait(false);
+            return me is null ? refusal! : Results.Ok(new MeOut(me.TelegramId, me.Username, me.FirstName, me.LoyaltyPoints));
         }).RequireAuthorization();
 
         return app;
@@ -153,6 +144,24 @@ public static partial class AuthEndpoints
 
         // Typed null: an untyped one would convert through byte[] into an empty Memory, not "none".
         return length > capBytes ? (ReadOnlyMemory<byte>?)null : buffer.AsMemory(0, length);
+    }
+
+    /// <summary>
+    /// The user a validated token speaks for, or the 401 to answer instead: a valid signature on a
+    /// subject that is not a user id, or on a user who is gone, is still no identity
+    /// (RULE-SERVER-AUTHORITY).
+    /// </summary>
+    public static async Task<(AppUser? User, IResult? Refusal)> CallerAsync(HttpContext http, ExchangeDbContext db)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(db);
+        if (AccessTokens.TelegramId(http.User) is not { } telegramId)
+        {
+            return (null, Refusal("bad_subject"));
+        }
+
+        var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.TelegramId == telegramId, http.RequestAborted).ConfigureAwait(false);
+        return user is null ? (null, Refusal("unknown_user")) : (user, null);
     }
 
     private static RefusalResult Refusal(string reason) => new(reason);

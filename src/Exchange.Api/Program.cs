@@ -5,6 +5,7 @@ using Exchange.Api.Data;
 using Exchange.Api.Json;
 using Exchange.Api.Locale;
 using Exchange.Api.Logging;
+using Exchange.Api.Orders;
 using Exchange.Api.Pricing;
 using Exchange.Api.Rates;
 using Exchange.Api.Reference;
@@ -119,6 +120,7 @@ try
     app.MapReferenceEndpoints();
     app.MapAuthEndpoints();
     app.MapRateEndpoints();
+    app.MapOrderEndpoints();
 
     await app.RunAsync().ConfigureAwait(false);
     return ExitSuccess;

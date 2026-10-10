@@ -9,10 +9,10 @@ using Shouldly;
 namespace Exchange.Api.Tests.Auth;
 
 /// <summary>
-/// INV-3 for <c>/api/users</c> (the order routes join with PHASE-4): without a valid JWT the answer
-/// is the 401 of INV-21, whatever is wrong with the token - none, not Bearer, another key, another
-/// algorithm, no signature, another audience, expired, or a user who does not exist. The reason is
-/// logged at WARNING; the token is not.
+/// INV-3 for <c>/api/users</c> and <c>/api/orders</c>: without a valid JWT the answer is the 401 of
+/// INV-21, whatever is wrong with the token - none, not Bearer, another key, another algorithm, no
+/// signature, another audience, expired, or a user who does not exist. The reason is logged at
+/// WARNING; the token is not. (Another client's order answering 404 is in <c>OrderApiTests</c>.)
 /// </summary>
 public sealed class AccessTests(PostgresFixture database)
 {
@@ -28,6 +28,14 @@ public sealed class AccessTests(PostgresFixture database)
     private static readonly DateTimeOffset Start = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
 
     public static TheoryData<string> Forgeries() => ["other_key", "hs512", "none", "other_audience", "no_exp", "unknown_user", "sub_not_a_number"];
+
+    // Every route that needs a token: a forgery that passes the signature check but names no user
+    // reaches the handler, which must answer 401 too.
+    public static TheoryData<string, string, string> ForgeriesOnEveryRoute() =>
+        [.. new[] { ("GET", Me), ("GET", "/api/orders"), ("GET", "/api/orders/1"), ("POST", "/api/orders"), ("POST", "/api/rate") }
+            .SelectMany(route => RouteForgeries.Select(kind => (route.Item1, route.Item2, kind)))];
+
+    private static readonly string[] RouteForgeries = ["unknown_user", "sub_not_a_number", "other_key", "none"];
 
     [Theory]
     [InlineData(null)]
@@ -70,6 +78,40 @@ public sealed class AccessTests(PostgresFixture database)
         using var response = await TelegramAuth.GetAsync(client, Me, "Bearer " + token);
 
         await AuthApiTests.ShouldBeUnauthorizedAsync(response);
+    }
+
+    [Theory]
+    [MemberData(nameof(ForgeriesOnEveryRoute))]
+    public async Task A_forged_token_is_401_on_every_route_that_needs_one(string method, string path, string kind)
+    {
+        var time = new FakeTimeProvider(Start);
+        using var factory = new TestAppFactory(await EnvironmentAsync(), time: time);
+        using var client = factory.CreateClient();
+        await TelegramAuth.SignInAsync(client, InitData());
+        var token = Forge(kind, Start.ToUnixTimeSeconds());
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+        if (method == "POST")
+        {
+            request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        }
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        await AuthApiTests.ShouldBeUnauthorizedAsync(response);
+    }
+
+    private static string Forge(string kind, long now)
+    {
+        var header = new Dictionary<string, string> { ["alg"] = "HS256", ["typ"] = "JWT" };
+        var claims = new Dictionary<string, object> { ["sub"] = TelegramId.ToString(System.Globalization.CultureInfo.InvariantCulture), ["iat"] = now, ["exp"] = now + TtlSeconds, ["aud"] = Audience };
+        return kind switch
+        {
+            "other_key" => TelegramAuth.Forge(header, claims, new string('k', 40)),
+            "none" => TelegramAuth.Forge(new Dictionary<string, string> { ["alg"] = "none", ["typ"] = "JWT" }, claims, null),
+            "unknown_user" => TelegramAuth.Forge(header, With(claims, "sub", "999"), LongJwtSecret),
+            _ => TelegramAuth.Forge(header, With(claims, "sub", "ivan"), LongJwtSecret),
+        };
     }
 
     [Fact]

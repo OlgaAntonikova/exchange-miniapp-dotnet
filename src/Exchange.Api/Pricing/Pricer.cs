@@ -27,6 +27,9 @@ public sealed class Pricer(ExchangeDbContext db, RateSources sources)
     /// <summary>The kind of a receive amount that rounds to zero.</summary>
     public const string AmountTooSmall = "amount_too_small";
 
+    /// <summary>The kind of an order amount outside its give currency's limits (spec 1.5).</summary>
+    public const string AmountOutOfRange = "amount_out_of_range";
+
     /// <summary>The kind of a direction with no fresh rate.</summary>
     public const string RatesUnavailable = "rates_unavailable";
 

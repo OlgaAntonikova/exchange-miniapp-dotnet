@@ -11,9 +11,9 @@ using Shouldly;
 namespace Exchange.Api.Tests;
 
 /// <summary>
-/// INV-21: every error body of spec 1.10, exactly. PHASE-0 brings the 500 body, PHASE-2 the 401 and
-/// PHASE-3 the 422 and 503 of <c>POST /api/rate</c>; the 404 and 409 bodies join this class with
-/// the order endpoints.
+/// INV-21: every error body of spec 1.10, exactly. PHASE-0 brings the 500 body, PHASE-2 the 401,
+/// PHASE-3 the 422 and 503 of <c>POST /api/rate</c>, and PHASE-4 the order endpoints' 404 and 422;
+/// the 409 joins with the cancel endpoint.
 /// </summary>
 public sealed class ErrorContractTests(PostgresFixture database)
 {
@@ -81,6 +81,29 @@ public sealed class ErrorContractTests(PostgresFixture database)
         body.RootElement.EnumerateObject().Select(p => p.Name).ShouldBe(["error", "message"]);
         body.RootElement.GetProperty("error").GetString().ShouldBe("rates_unavailable");
         body.RootElement.GetProperty("message").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task An_order_that_is_not_the_callers_answers_404_not_found()
+    {
+        await using var app = new Orders.OrderApiTests.OrderApp(await EnvironmentAsync());
+        var (_, theirs) = await app.PostAsync(7_200_002, Orders.OrderApiTests.WireOrder());
+
+        using var response = await app.SendAsync(7_200_001, HttpMethod.Get, "/api/orders/" + theirs.GetProperty("id").GetInt32(), null);
+
+        await Orders.OrderApiTests.ShouldBeNotFoundAsync(response);
+    }
+
+    [Fact]
+    public async Task An_order_outside_its_limits_answers_422_amount_out_of_range()
+    {
+        await using var app = new Orders.OrderApiTests.OrderApp(await EnvironmentAsync());
+        var body = Orders.OrderApiTests.WireOrder();
+        body["amount_give"] = "10";
+
+        using var response = await app.SendAsync(7_200_001, HttpMethod.Post, "/api/orders", body);
+
+        await RateApiTests.ShouldBe422Async(response, "amount_out_of_range", ["body.amount_give"]);
     }
 
     private async Task<Dictionary<string, string?>> EnvironmentAsync()
