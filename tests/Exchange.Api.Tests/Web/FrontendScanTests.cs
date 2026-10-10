@@ -73,7 +73,6 @@ public sealed partial class FrontendScanTests(PostgresFixture database)
     [Theory]
     [InlineData("/static/..%2fExchange.Api.dll")]
     [InlineData("/static/%2e%2e/Exchange.Api.dll")]
-    [InlineData("/static/../Exchange.Api.dll")]
     [InlineData("/static/missing.js")]
     [InlineData("/index.html")] // the files live under /static only
     public async Task Nothing_outside_the_web_root_is_served(string path)

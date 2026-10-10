@@ -16,6 +16,7 @@ public sealed class WebRootTests
     private const string ServeHost = "127.0.0.2";
     private const int ServePort = 8000;
     private const int StartTimeoutSeconds = 60;
+    private const int PollIntervalMilliseconds = 200;
 
     [Fact]
     public async Task The_real_app_serves_its_page_whatever_the_working_directory()
@@ -95,7 +96,7 @@ public sealed class WebRootTests
                 // not listening yet
             }
 
-            await Task.Delay(200, TestContext.Current.CancellationToken);
+            await Task.Delay(PollIntervalMilliseconds, TestContext.Current.CancellationToken);
         }
 
         return null;

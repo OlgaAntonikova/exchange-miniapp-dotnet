@@ -18,6 +18,7 @@ const DISCOUNT_TIERS = [
   { points: 6, percent: "1" },
 ];
 const AMOUNT_PATTERN = /^(0|[1-9][0-9]{0,15})([.,][0-9]{1,2})?$/;
+const NONZERO_DIGIT = /[1-9]/;
 const GAUGE_RADIUS = 80;
 const GAUGE_MARGIN = 20;
 const GAUGE_STROKE = 14;
@@ -159,7 +160,14 @@ async function api(path, options = {}, retried = false) {
 // --- start -------------------------------------------------------------------------------------
 
 async function start() {
-  state.texts = await (await fetch("/static/locale/ru.json")).json();
+  try {
+    state.texts = await (await fetch("/static/locale/ru.json")).json();
+  } catch {
+    // Without the locale file no text can be shown; the lookup then answers each key's own name,
+    // which still tells that the page did not load rather than leaving it blank.
+    show(el("div", { class: "card" }, [el("p", { class: "error", text: t("load_failed") })]));
+    return;
+  }
   document.title = t("app_title");
   const inTelegram = Boolean(tg && tg.initData);
   if (inTelegram) {
@@ -364,17 +372,19 @@ function renderExchange() {
   const fields = inFormOrder([...direction.order_fields, ...direction.optional_fields]);
   show(
     el("h1", { text: t("exchange_title") }),
-    el("label", { text: t("field_amount_give") }),
-    el("input", {
-      name: "amount_give",
-      inputmode: "decimal",
-      value: state.form.amount_give,
-      placeholder: "1000",
-      oninput: (event) => {
-        state.form.amount_give = event.target.value.trim();
-        formChanged();
-      },
-    }),
+    el("div", { id: "field-amount_give" }, [
+      el("label", { text: t("field_amount_give") }),
+      el("input", {
+        name: "amount_give",
+        inputmode: "decimal",
+        value: state.form.amount_give,
+        placeholder: "1000",
+        oninput: (event) => {
+          state.form.amount_give = event.target.value.trim();
+          formChanged();
+        },
+      }),
+    ]),
     el("label", { text: t("field_give") }),
     select("give", gives().map((code) => [code, codeName("give", code)]), give, (next) => {
       state.form.give = next;
@@ -401,6 +411,11 @@ function renderExchange() {
   );
   renderQuote();
   scheduleQuote();
+  startRefresh();
+}
+
+function startRefresh() {
+  clearInterval(refreshTimer);
   refreshTimer = setInterval(() => requestQuote(), QUOTE_REFRESH_MS);
 }
 
@@ -409,9 +424,10 @@ function inFormOrder(fields) {
   return [...fields].sort((a, b) => rank(a) - rank(b));
 }
 
+// The amount as the API takes it, or null; zero is no amount (the API asks for more than zero).
 function amountForApi() {
   const amount = state.form.amount_give.replace(",", ".");
-  return AMOUNT_PATTERN.test(state.form.amount_give) ? amount : null;
+  return AMOUNT_PATTERN.test(state.form.amount_give) && NONZERO_DIGIT.test(amount) ? amount : null;
 }
 
 function quoteBody(direction) {
@@ -433,8 +449,8 @@ function stopQuoting() {
   clearInterval(refreshTimer);
 }
 
-// A quote belongs to the form it was asked for: any change drops it, so neither "Place order" nor
-// the confirmation can show a number the order would not get, and a late answer is ignored.
+// A quote belongs to the form it was asked for: any change drops it, so "Place order" never offers a
+// stale number, and a late answer is ignored. The server prices the order again when it is placed.
 function dropQuote() {
   state.quote = null;
   state.quoteError = null;
@@ -530,11 +546,18 @@ function orderBody(direction) {
 }
 
 function confirmOrder() {
+  // The quote under the confirmation stays the one shown: no refresh while it is open.
+  stopQuoting();
   const quote = state.quote;
   const modal = document.getElementById("modal");
   const close = () => {
     modal.hidden = true;
     modal.replaceChildren();
+  };
+  const back = () => {
+    close();
+    requestQuote();
+    startRefresh();
   };
   modal.replaceChildren(
     el("div", { class: "card" }, [
@@ -556,7 +579,7 @@ function confirmOrder() {
       ]),
       el("p", { id: "confirm-error", class: "error" }),
       el("button", { id: "confirm", text: t("confirm_place"), onclick: () => placeOrder(close) }),
-      el("button", { class: "secondary", text: t("cancel"), onclick: close }),
+      el("button", { class: "secondary", text: t("cancel"), onclick: back }),
     ]),
   );
   modal.hidden = false;
