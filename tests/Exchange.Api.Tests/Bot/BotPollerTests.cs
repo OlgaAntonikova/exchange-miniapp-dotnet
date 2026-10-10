@@ -61,9 +61,20 @@ public sealed class BotPollerTests
         _logs.Events.Where(e => e.Level == LogEventLevel.Error).ShouldHaveSingleItem().MessageTemplate.Text.ShouldContain("polling failed");
     }
 
+    [Theory]
+    [InlineData(AppEnvironment.Demo)]
+    [InlineData(AppEnvironment.Production)] // it would remove the real bot's webhook
+    public async Task The_poller_refuses_demo_and_production(AppEnvironment environment) =>
+        await Should.ThrowAsync<InvalidOperationException>(() => Poller(new PollingBot([]), new RecordingHandler(null), environment).StartAsync(TestContext.Current.CancellationToken));
+
     [Fact]
-    public async Task The_poller_refuses_demo_mode() =>
-        await Should.ThrowAsync<InvalidOperationException>(() => Poller(new PollingBot([]), new RecordingHandler(null), demo: true).StartAsync(TestContext.Current.CancellationToken));
+    public void The_poller_is_added_only_with_the_poll_command()
+    {
+        static int Pollers(bool poll) => new ServiceCollection().AddBot(poll).Count(d => d.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)) - 1; // less the dispatcher
+
+        Pollers(poll: false).ShouldBe(0);
+        Pollers(poll: true).ShouldBe(1);
+    }
 
     [Fact]
     public void The_poll_client_outlasts_a_long_poll()
@@ -79,10 +90,10 @@ public sealed class BotPollerTests
         return document.RootElement.Clone();
     }
 
-    private BotPoller Poller(PollingBot bot, RecordingHandler handler, bool demo = false)
+    private BotPoller Poller(PollingBot bot, RecordingHandler handler, AppEnvironment appEnvironment = AppEnvironment.Test)
     {
-        var environment = demo ? TestSettings.Demo() : TestSettings.Production();
-        var settings = SettingsLoader.Load(demo ? AppEnvironment.Demo : AppEnvironment.Test, key => environment.GetValueOrDefault(key), length => new byte[length]);
+        var environment = appEnvironment == AppEnvironment.Demo ? TestSettings.Demo() : TestSettings.Production();
+        var settings = SettingsLoader.Load(appEnvironment, key => environment.GetValueOrDefault(key), length => new byte[length]);
         var services = new ServiceCollection().AddSingleton<IBotUpdateHandler>(handler).BuildServiceProvider();
 #pragma warning disable CA2000 // the factory lives as long as the test
         var factory = new SerilogLoggerFactory(new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(_logs).CreateLogger(), dispose: true);

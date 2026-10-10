@@ -35,8 +35,11 @@ public static class BotSetup
     /// <summary>The service key of the poller's HTTP client, which outlasts a long poll.</summary>
     public const string PollClientKey = "telegram-poll";
 
-    /// <summary>How long one <c>getUpdates</c> call may take: the long poll and a margin.</summary>
-    public const int PollRequestTimeoutSeconds = BotPoller.LongPollSeconds + 10;
+    /// <summary>How long beyond the long poll a <c>getUpdates</c> call may take to answer.</summary>
+    public const int PollMarginSeconds = 10;
+
+    /// <summary>How long one <c>getUpdates</c> call may take: the long poll and the margin.</summary>
+    public const int PollRequestTimeoutSeconds = BotPoller.LongPollSeconds + PollMarginSeconds;
 
     /// <summary>The client Bot API calls go through (a plain singleton, D-035).</summary>
     public static HttpClient CreateClient(int timeoutSeconds = RequestTimeoutSeconds) => new(RateSetup.CreateHandler())

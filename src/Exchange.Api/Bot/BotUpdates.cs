@@ -63,10 +63,11 @@ public sealed partial class BotUpdates(OrderTransitions transitions, OrderNotifi
             return;
         }
 
+        // The change is committed: from here on no cancellation may cost the client their message.
         var order = result.Order!;
-        var client = await db.Users.AsNoTracking().SingleAsync(user => user.Id == order.UserId, cancellationToken).ConfigureAwait(false);
+        var client = await db.Users.AsNoTracking().SingleAsync(user => user.Id == order.UserId, CancellationToken.None).ConfigureAwait(false);
         notifications.StatusChanged(order, client);
-        await AnswerAsync(callbackId, texts.Text(LocaleKeys.Status(OrderCodes.Of(order.Status))), cancellationToken).ConfigureAwait(false);
+        await AnswerAsync(callbackId, texts.Text(LocaleKeys.Status(OrderCodes.Of(order.Status))), CancellationToken.None).ConfigureAwait(false);
     }
 
     // The spinner on the operator's button stops either way; a failed answer is only logged.
