@@ -32,7 +32,7 @@ public sealed class AccessTests(PostgresFixture database)
     // Every route that needs a token: a forgery that passes the signature check but names no user
     // reaches the handler, which must answer 401 too.
     public static TheoryData<string, string, string> ForgeriesOnEveryRoute() =>
-        [.. new[] { ("GET", Me), ("GET", "/api/orders"), ("GET", "/api/orders/1"), ("POST", "/api/orders"), ("POST", "/api/rate") }
+        [.. new[] { ("GET", Me), ("GET", "/api/orders"), ("GET", "/api/orders/1"), ("POST", "/api/orders"), ("POST", "/api/orders/1/cancel"), ("POST", "/api/rate") }
             .SelectMany(route => RouteForgeries.Select(kind => (route.Item1, route.Item2, kind)))];
 
     private static readonly string[] RouteForgeries = ["unknown_user", "sub_not_a_number", "other_key", "none"];

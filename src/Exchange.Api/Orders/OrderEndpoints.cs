@@ -77,7 +77,7 @@ public static partial class OrderEndpoints
         DateTimeOffset? ClosedAt,
         OrderDetailsOut Details);
 
-    /// <summary>Maps <c>POST /api/orders</c>, <c>GET /api/orders</c> and <c>GET /api/orders/{order_id}</c>.</summary>
+    /// <summary>Maps <c>POST /api/orders</c>, <c>GET /api/orders</c>, <c>GET /api/orders/{order_id}</c> and <c>POST /api/orders/{order_id}/cancel</c>.</summary>
     public static IEndpointRouteBuilder MapOrderEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost(OrdersRoute, async (HttpContext http, ExchangeDbContext db, Pricer pricer, AppSettings settings, LocaleTexts texts) =>
@@ -140,8 +140,36 @@ public static partial class OrderEndpoints
             return Results.Ok(Out(order));
         }).RequireAuthorization();
 
+        app.MapPost(OrdersRoute + "/{order_id}/cancel", async (string order_id, HttpContext http, ExchangeDbContext db, OrderTransitions transitions) =>
+        {
+            var (user, refusal) = await AuthEndpoints.CallerAsync(http, db).ConfigureAwait(false);
+            if (user is null)
+            {
+                return refusal!;
+            }
+
+            if (TryOrderId(order_id) is not { } id)
+            {
+                var logger = Logger(http);
+                LogNotFound(logger);
+                return NotFound();
+            }
+
+            // A missing or someone else's order is logged by the transition function.
+            var result = await transitions.ChangeAsync(id, OrderStatus.Cancelled, Actor.Client, user.TelegramId, user.Id, http.RequestAborted).ConfigureAwait(false);
+            return result.Outcome switch
+            {
+                TransitionOutcome.Changed => Results.Ok(Out(result.Order!)),
+                TransitionOutcome.NotAllowed => NotCancellable(),
+                _ => NotFound(),
+            };
+        }).RequireAuthorization();
+
         return app;
     }
+
+    /// <summary>The 409 of INV-21: cancelling an order that is not <c>PENDING</c>.</summary>
+    public static IResult NotCancellable() => Results.Json(new Dictionary<string, string> { ["error"] = "not_cancellable" }, statusCode: StatusCodes.Status409Conflict);
 
     /// <summary>
     /// An order id from the path: plain ASCII digits that fit a 32-bit integer (no sign, no space).
@@ -240,7 +268,7 @@ public static partial class OrderEndpoints
 
     // timestamptz keeps microseconds; the clock gives 100-nanosecond ticks. Cut to the column's
     // precision before saving, so the created order and the same order read back say the same.
-    private static DateTimeOffset ToMicroseconds(DateTimeOffset moment) =>
+    internal static DateTimeOffset ToMicroseconds(DateTimeOffset moment) =>
         new(moment.Ticks - (moment.Ticks % TimeSpan.TicksPerMicrosecond), moment.Offset);
 
     private static ILogger Logger(HttpContext http) => http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(LoggerCategory);

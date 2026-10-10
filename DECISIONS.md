@@ -432,3 +432,20 @@ now one shared function that `POST /api/rate` uses too, so a valid signature on 
 not exist is a 401 on every route that needs a token. The rate snapshot time is cut to
 microseconds before it is saved, the precision of `timestamptz`, so the created order and the
 same order read back are identical.
+
+### D-039 - The transition function
+
+Every status change goes through `OrderTransitions.ChangeAsync`: it opens a transaction, reads
+the order with `SELECT ... FOR UPDATE`, so concurrent changes of one order run one after
+another, checks the move against `StatusMachine` for the actor (`D-037`), and writes the new
+status, `closed_at` (cut to microseconds, as `D-038` does for the snapshot time) and the
+history row with the actor's Telegram id, then commits. A refused move writes nothing. For the
+client the order must also be their own; another client's order is reported as not found, so
+`POST /api/orders/{order_id}/cancel` answers the same 404 as for a missing order, and the 409
+`not_cancellable` only for the caller's own order that is no longer `PENDING`. The client's
+cancel and, from the bot, the operator's buttons call this one function; client messages hook
+onto its successful changes. Every refusal - an order not found or a move not allowed - is
+logged at `WARNING` with the order id and the actor, never with order data. `closed_at` is the
+app's clock at the change, while the history row's timestamp is the database's `now()`, the
+start of its transaction, which may be before a wait for the lock: the two can differ by that
+wait, and the history row orders the changes.

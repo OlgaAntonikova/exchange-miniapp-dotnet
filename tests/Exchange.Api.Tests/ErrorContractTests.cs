@@ -12,8 +12,8 @@ namespace Exchange.Api.Tests;
 
 /// <summary>
 /// INV-21: every error body of spec 1.10, exactly. PHASE-0 brings the 500 body, PHASE-2 the 401,
-/// PHASE-3 the 422 and 503 of <c>POST /api/rate</c>, and PHASE-4 the order endpoints' 404 and 422;
-/// the 409 joins with the cancel endpoint.
+/// PHASE-3 the 422 and 503 of <c>POST /api/rate</c>, and PHASE-4 the order endpoints' 404, 409 and
+/// 422.
 /// </summary>
 public sealed class ErrorContractTests(PostgresFixture database)
 {
@@ -104,6 +104,20 @@ public sealed class ErrorContractTests(PostgresFixture database)
         using var response = await app.SendAsync(7_200_001, HttpMethod.Post, "/api/orders", body);
 
         await RateApiTests.ShouldBe422Async(response, "amount_out_of_range", ["body.amount_give"]);
+    }
+
+    [Fact]
+    public async Task Cancelling_an_order_that_is_not_pending_answers_409_not_cancellable()
+    {
+        await using var app = new Orders.OrderApiTests.OrderApp(await EnvironmentAsync());
+        var id = await Orders.OrderTransitionTests.PlaceAsync(app, 7_200_001);
+        using (await app.SendAsync(7_200_001, HttpMethod.Post, $"/api/orders/{id}/cancel", null))
+        {
+        }
+
+        using var response = await app.SendAsync(7_200_001, HttpMethod.Post, $"/api/orders/{id}/cancel", null);
+
+        await Orders.OrderTransitionTests.ShouldBeNotCancellableAsync(response);
     }
 
     private async Task<Dictionary<string, string?>> EnvironmentAsync()
