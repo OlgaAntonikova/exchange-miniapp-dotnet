@@ -9,6 +9,15 @@ public static class RateSetup
     public const int MaxResponseBytes = 1024 * 1024;
 
     /// <summary>
+    /// How long a pooled connection of a long-lived client is reused before a new one is opened,
+    /// so a changed DNS answer is picked up (the handler's default is forever).
+    /// </summary>
+    public static readonly TimeSpan PooledConnectionLifetime = TimeSpan.FromMinutes(15);
+
+    /// <summary>The handler every long-lived outgoing client uses: pooled connections renewed after <see cref="PooledConnectionLifetime"/>.</summary>
+    public static SocketsHttpHandler CreateHandler() => new() { PooledConnectionLifetime = PooledConnectionLifetime };
+
+    /// <summary>
     /// Registers <see cref="RateSources"/> with the ECB and Bank of Russia services. Each source's
     /// client and service are keyed singletons, so the container disposes them with the app.
     /// </summary>
@@ -50,7 +59,7 @@ public static class RateSetup
     /// A client for one source: <c>RATE_FETCH_TIMEOUT_SECONDS</c> per request, and a body of at most
     /// <see cref="MaxResponseBytes"/>; a longer one fails the fetch as a transport error.
     /// </summary>
-    public static HttpClient CreateClient(int timeoutSeconds) => new()
+    public static HttpClient CreateClient(int timeoutSeconds) => new(CreateHandler())
     {
         Timeout = TimeSpan.FromSeconds(timeoutSeconds),
         MaxResponseContentBufferSize = MaxResponseBytes,

@@ -1,3 +1,4 @@
+using Exchange.Api.Alerts;
 using Exchange.Api.Tests.Data;
 using Exchange.Api.Tests.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,5 +32,20 @@ public sealed class DemoAlertTests(PostgresFixture database)
 
         logs.Text.ShouldContain("Probe failure in demo mode");
         logs.Text.ShouldNotContain("Alert for");
+    }
+
+    [Fact]
+    public async Task Demo_mode_has_no_telegram_alert_channel()
+    {
+        var url = await database.CreateDatabaseUrlAsync();
+        IAlertChannel? channel = null;
+        ProcessEnvironment.With("demo", () =>
+        {
+            using var factory = new TestAppFactory(TestSettings.Demo(url));
+            using var client = factory.CreateClient();
+            channel = factory.Services.GetRequiredService<IAlertChannel>();
+        });
+
+        channel.ShouldBeOfType<NoAlertChannel>();
     }
 }

@@ -370,3 +370,23 @@ category `Cf`, such as a right-to-left override or a zero-width space, which wou
 operator reads in the chat) and a lone surrogate. The IBAN must be ASCII letters and digits after
 upper-casing, and its MOD 97-10 check is computed digit by digit. The mask uses three ASCII dots,
 as spec 1.5 writes it (`ME25...8951`).
+
+### D-035 - Alerts reach the operator chat through the Bot API
+
+This replaces the log-line delivery of `D-021`. Outside demo mode an alert is posted to the Bot
+API's `sendMessage` for `OPERATOR_CHAT_ID` - one plain-text message with link previews off, cut
+to Telegram's 4096-character limit with a `[truncated]` mark (never inside a surrogate pair) -
+through its own `HttpClient` with a 10-second timeout and a 64 KiB reply limit. Only a 200
+answer counts as delivered. The request URL holds the bot token, so a failure becomes a reason
+code (`http_<status>`, `transport_<type>`, `timeout`) and the transport's exception is not
+chained; the dispatcher writes that reason to the self-log (stderr) and never to the log, which
+would raise another alert. A cancellation from a stopping app is not a failed delivery. In demo
+mode the channel does nothing; the sink is not attached there anyway (spec 1.9). No package is
+added: the Bot API is one JSON POST (spec 6.2 forbids `Telegram.Bot`). Spec 6 names
+`IHttpClientFactory` typed clients for outgoing HTTP; this client and the two rate clients
+(`D-032`) are instead plain `HttpClient` singletons, created once and disposed by the
+container. The factory adds a logging handler that writes each request URI, and the Bot API URI
+holds the bot token, so keeping it out of the path removes one way to leak it (the category is
+also raised to `Warning`, spec 4). What the factory's handler rotation gave - fresh DNS for a
+long-lived client - is kept by giving each client a `SocketsHttpHandler` whose pooled
+connections live 15 minutes (the handler's default is forever).

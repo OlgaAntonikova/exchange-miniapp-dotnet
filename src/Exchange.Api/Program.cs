@@ -75,7 +75,7 @@ try
     builder.Services.AddSingleton(services => new AlertSink(
         services.GetRequiredService<TimeProvider>(),
         TimeSpan.FromSeconds(services.GetRequiredService<AppSettings>().AlertCooldownSeconds)));
-    builder.Services.AddSingleton<IAlertChannel, LogOnlyAlertChannel>();
+    builder.Services.AddAlertChannel();
     builder.Services.AddHostedService<AlertDispatcher>();
     builder.Services.AddHostedService<StartupRecord>();
     builder.Services.AddSerilog(
