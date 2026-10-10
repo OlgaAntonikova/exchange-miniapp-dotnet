@@ -412,3 +412,23 @@ operator and the admin may make every allowed move; the client may make exactly 
 its own `PENDING` order (ownership is the API's check); `system` makes none - it is the actor of
 an order's creation, recorded as a history row with no previous status. `COMPLETED` and
 `CANCELLED` close an order.
+
+### D-038 - How an order is placed and read
+
+`POST /api/orders` reads its body like a quote (`D-033`, now shared as `PricingRefusal`) and
+adds the detail fields, each checked by its rule (`D-034`); the priced fields' faults and the
+details' faults are listed together, priced first, then the details in the order of section
+1.10. A detail sent as JSON `null` or as an empty string counts as absent, as an id does - the
+form sends either for a field it cleared - while any other non-string is refused. The order
+limits of section 1.5 are checked first, before any database or rate lookup, then the request
+takes the one pricing path a quote takes (`Pricer`), so an order is priced exactly as its quote
+was (`INV-4`). The order and its first history row (no previous status, `PENDING`, actor
+`system`) are saved in one transaction. `GET /api/orders` lists the caller's own orders newest
+first, at most 50. An order id in the path is parsed by the endpoint: plain digits that fit a
+32-bit integer, so `abc`, `-1` or `1.5` name no order and answer the 404 of `INV-21` instead of
+a framework 400 with a body the spec does not list; another client's order answers the same 404
+(`INV-3`). The caller is looked up from the token's subject the way `/api/users/me` does it,
+now one shared function that `POST /api/rate` uses too, so a valid signature on a user who does
+not exist is a 401 on every route that needs a token. The rate snapshot time is cut to
+microseconds before it is saved, the precision of `timestamptz`, so the created order and the
+same order read back are identical.

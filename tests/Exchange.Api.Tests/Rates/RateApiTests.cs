@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Exchange.Api.Rates;
+using Exchange.Api.Pricing;
 using Exchange.Api.Settings;
 using Exchange.Api.Tests.Auth;
 using Exchange.Api.Tests.Data;
@@ -160,7 +160,7 @@ public sealed class RateApiTests(PostgresFixture database)
 
     [Fact]
     public async Task A_body_over_the_cap_is_422_for_the_body() =>
-        await ShouldBe422Async("{" + Quoted("give") + ": " + Quoted("USD_CASH") + ", " + Quoted("receive") + ": " + Quoted("EUR_WIRE") + ", " + Quoted("amount_give") + ": " + Quoted("100") + ", " + Quoted("padding") + ": " + Quoted(new string('a', RateEndpoints.MaxQuoteBodyBytes + 1)) + "}", "invalid_request", ["body"]);
+        await ShouldBe422Async("{" + Quoted("give") + ": " + Quoted("USD_CASH") + ", " + Quoted("receive") + ": " + Quoted("EUR_WIRE") + ", " + Quoted("amount_give") + ": " + Quoted("100") + ", " + Quoted("padding") + ": " + Quoted(new string('a', PricingRefusal.MaxBodyBytes + 1)) + "}", "invalid_request", ["body"]);
 
     [Fact]
     public async Task A_receive_amount_that_rounds_to_zero_is_422_amount_too_small() =>

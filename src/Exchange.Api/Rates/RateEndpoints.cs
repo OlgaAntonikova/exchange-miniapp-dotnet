@@ -1,5 +1,5 @@
-using System.Text.Json;
 using Exchange.Api.Auth;
+using Exchange.Api.Data;
 using Exchange.Api.Locale;
 using Exchange.Api.Pricing;
 using Exchange.Domain.Directions;
@@ -13,11 +13,8 @@ namespace Exchange.Api.Rates;
 /// its fields; a direction with no fresh rate is the 503 with the localized message, never a
 /// number (RULE-RATE-FRESHNESS).
 /// </summary>
-public static partial class RateEndpoints
+public static class RateEndpoints
 {
-    /// <summary>The largest quote body read; a quote is a few hundred bytes.</summary>
-    public const int MaxQuoteBodyBytes = 16 * 1024;
-
     /// <summary>A quote's markups in percent: the stored components and the derived totals.</summary>
     /// <param name="City">The city's markup.</param>
     /// <param name="BankGive">The sender bank's markup.</param>
@@ -41,50 +38,32 @@ public static partial class RateEndpoints
     /// <param name="RateTakenAt">The oldest of their snapshot times.</param>
     public sealed record QuoteOut(string Give, string Receive, decimal AmountGive, decimal AmountReceive, decimal BaseRate, decimal EffectiveRate, MarkupOut MarkupPercent, string Provider, DateTimeOffset RateTakenAt);
 
-    private const string LoggerCategory = "Exchange.Api.Rates";
-
     /// <summary>Maps <c>POST /api/rate</c>.</summary>
     public static IEndpointRouteBuilder MapRateEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/rate", async (HttpContext http, Pricer pricer, LocaleTexts texts) =>
+        app.MapPost("/api/rate", async (HttpContext http, Pricer pricer, LocaleTexts texts, ExchangeDbContext db) =>
         {
+            // A valid signature on a user who does not exist is no identity, as for every other
+            // route that needs a token (RULE-SERVER-AUTHORITY).
+            var (user, refusal) = await AuthEndpoints.CallerAsync(http, db).ConfigureAwait(false);
+            if (user is null)
+            {
+                return refusal!;
+            }
+
             try
             {
-                var input = await ReadAsync(http.Request, http.RequestAborted).ConfigureAwait(false);
+                using var body = await PricingRefusal.ReadBodyAsync(http.Request, http.RequestAborted).ConfigureAwait(false);
+                var input = PricingRequest.Parse(body.RootElement);
                 var priced = await pricer.PriceAsync(input, input.ReferenceIds.Keys, Purpose.Quote, http.RequestAborted).ConfigureAwait(false);
                 return Results.Ok(Out(priced));
             }
             catch (PricingException refused)
             {
-                return Refusal(http, texts, refused);
+                return PricingRefusal.Result(http, texts, refused, "Quote");
             }
         }).RequireAuthorization();
         return app;
-    }
-
-    // The body, read up to the cap and parsed with duplicate properties refused (which copy would
-    // count is ambiguous); anything unusable is the body as a whole.
-    private static async Task<PricingInput> ReadAsync(HttpRequest request, CancellationToken cancellationToken)
-    {
-        if (await AuthEndpoints.ReadCappedAsync(request.Body, MaxQuoteBodyBytes, cancellationToken).ConfigureAwait(false) is not { } body)
-        {
-            throw new PricingException(PricingRequest.InvalidRequest, [PricingRequest.WholeBody]);
-        }
-
-        JsonDocument document;
-        try
-        {
-            document = JsonDocument.Parse(body, new JsonDocumentOptions { AllowDuplicateProperties = false });
-        }
-        catch (JsonException)
-        {
-            throw new PricingException(PricingRequest.InvalidRequest, [PricingRequest.WholeBody]);
-        }
-
-        using (document)
-        {
-            return PricingRequest.Parse(document.RootElement);
-        }
     }
 
     private static QuoteOut Out(Priced priced)
@@ -113,18 +92,4 @@ public static partial class RateEndpoints
             priced.Sourced.TakenAt);
     }
 
-    private static IResult Refusal(HttpContext http, LocaleTexts texts, PricingException refused)
-    {
-        LogRefused(http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(LoggerCategory), refused.Kind, string.Join(", ", refused.Fields));
-        return refused.Kind == Pricer.RatesUnavailable
-            ? Results.Json(
-                new Dictionary<string, string> { ["error"] = Pricer.RatesUnavailable, ["message"] = texts.Text(LocaleKeys.RatesUnavailable) },
-                statusCode: StatusCodes.Status503ServiceUnavailable)
-            : Results.Json(
-                new Dictionary<string, object> { ["error"] = refused.Kind, ["fields"] = refused.Fields },
-                statusCode: StatusCodes.Status422UnprocessableEntity);
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Quote refused: {Error} {Fields}")]
-    private static partial void LogRefused(ILogger logger, string error, string fields);
 }
