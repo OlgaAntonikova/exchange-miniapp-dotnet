@@ -402,3 +402,13 @@ redaction. If the record has an exception, only its type follows, on its own lin
 the original exception, which the redacting sink keeps beside its masked stand-in. The exception's
 message stays in the log: for a failure with a reason code the alert already says it, and for any
 other it is where a secret would be most likely to hide.
+
+### D-037 - The status machine and who may move an order
+
+The transitions of spec 1.5 are one table in `Exchange.Domain` (`StatusMachine`), the single source
+for the API, the bot's buttons and the transition function. Each status lists its next statuses
+forward first and cancelling last, which is the order the operator's buttons show them in. The
+operator and the admin may make every allowed move; the client may make exactly one, cancelling
+its own `PENDING` order (ownership is the API's check); `system` makes none - it is the actor of
+an order's creation, recorded as a history row with no previous status. `COMPLETED` and
+`CANCELLED` close an order.
