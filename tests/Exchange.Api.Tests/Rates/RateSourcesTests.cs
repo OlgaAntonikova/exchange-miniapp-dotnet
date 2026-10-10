@@ -20,6 +20,7 @@ public sealed class RateSourcesTests
 {
     private const int CacheSeconds = 60;
     private const int MaxAgeSeconds = 3600;
+    private const int AlertCooldownSeconds = 900;
 
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 7, 9, 0, 0, TimeSpan.Zero));
     private readonly CapturingSink _logs = new();
@@ -108,7 +109,7 @@ public sealed class RateSourcesTests
         new(RateSources.Routes(Service(ecb), Service(cbr)), Logger<RateSources>());
 
     private RateService Service(FakeRateProvider provider) =>
-        new(provider, CacheSeconds, MaxAgeSeconds, 900, _time, NullLogger<RateService>.Instance);
+        new(provider, CacheSeconds, MaxAgeSeconds, AlertCooldownSeconds, _time, NullLogger<RateService>.Instance);
 
     private Microsoft.Extensions.Logging.ILogger<T> Logger<T>()
     {

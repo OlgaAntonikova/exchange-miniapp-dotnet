@@ -1,4 +1,5 @@
 using Exchange.Api.Alerts;
+using Exchange.Api.Logging;
 using Exchange.Api.Rates;
 using Exchange.Api.Tests.Logging;
 using Exchange.Domain.Directions;
@@ -70,6 +71,28 @@ public sealed class RateFreshnessTests
         var error = _logs.Events.Where(e => e.Level == LogEventLevel.Error).ShouldHaveSingleItem();
         Scalar(error, AlertSink.KeyProperty).ShouldBe("cbr");
         Scalar(error, AlertSink.CooldownSecondsProperty).ShouldBe(AlertCooldownSeconds);
+    }
+
+    [Fact]
+    public async Task A_failure_reaches_the_alert_queue_through_the_app_pipeline_with_its_key_and_cooldown()
+    {
+        // The app's own logging pipeline (redaction, enrichers, the alert sink), not a bare sink:
+        // a change there that dropped AlertKey or AlertCooldownSeconds would fail here.
+        var defaultCooldown = TimeSpan.FromSeconds(300);
+        var alerts = new AlertSink(_time, defaultCooldown);
+        using var serilog = LoggingSetup.Configure(new LoggerConfiguration(), "Information", new CapturingSink(), alerts).CreateLogger();
+        using var factory = new SerilogLoggerFactory(serilog);
+        var provider = new FakeRateProvider("cbr", _time).Fails("timeout").Fails("timeout");
+        using var service = new RateService(provider, CacheSeconds, MaxAgeSeconds, AlertCooldownSeconds, _time, factory.CreateLogger<RateService>());
+
+        await Should.ThrowAsync<RatesUnavailableException>(() => CurrentAsync(service));
+        alerts.Alerts.TryRead(out var alert).ShouldBeTrue();
+        alert!.Fingerprint.ShouldEndWith(" | cbr");
+
+        _time.Advance(defaultCooldown); // past the default cooldown, inside the rate one
+        await Should.ThrowAsync<RatesUnavailableException>(() => CurrentAsync(service));
+        provider.Calls.ShouldBe(2);
+        alerts.Alerts.TryRead(out _).ShouldBeFalse();
     }
 
     [Fact]
@@ -173,7 +196,7 @@ public sealed class RateFreshnessTests
     }
 
     [Fact]
-    public async Task A_cancelled_caller_does_not_use_up_the_cache_period()
+    public async Task A_fetch_cancelled_in_flight_leaves_no_attempt_behind()
     {
         // The caller gives up while the fetch is in flight: no attempt is recorded, so the next
         // request fetches at once instead of finding no snapshot for a whole cache period.
