@@ -103,6 +103,8 @@ public sealed class ApiContractTests(PostgresFixture database)
         ["details"] = JsonValueKind.Object,
     };
 
+    private static readonly Dictionary<string, JsonValueKind> WebhookShape = new() { ["ok"] = JsonValueKind.True };
+
     private static readonly Dictionary<string, JsonValueKind> CancelledOrderShape = new(OrderShape) { ["closed_at"] = JsonValueKind.String };
 
     // Spec 1.10, row by row: method, route template, the example path requested, whether it needs a
@@ -123,7 +125,7 @@ public sealed class ApiContractTests(PostgresFixture database)
         ("GET", "/api/orders", "/api/orders", true, HttpStatusCode.OK, true, OrderShape),
         ("GET", "/api/orders/{order_id}", "/api/orders/1", true, HttpStatusCode.OK, false, OrderShape),
         ("POST", "/api/orders/{order_id}/cancel", "/api/orders/1/cancel", true, HttpStatusCode.OK, false, CancelledOrderShape),
-        ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, null),
+        ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, WebhookShape),
     ];
 
     public static TheoryData<string, string> Built() =>
@@ -151,6 +153,13 @@ public sealed class ApiContractTests(PostgresFixture database)
         if (route == RateRoute)
         {
             request.Content = JsonContent.Create(new Dictionary<string, string> { ["give"] = "USD_CASH", ["receive"] = "EUR_WIRE", ["amount_give"] = "100" });
+        }
+
+        if (route == WebhookRoute)
+        {
+            // Telegram's call: the registered secret and an update that is not a button press.
+            request.Headers.TryAddWithoutValidation(Exchange.Api.Bot.BotEndpoints.SecretHeader, "webhook_secret-1");
+            request.Content = JsonContent.Create(new Dictionary<string, int> { ["update_id"] = 1 });
         }
 
         if (route == OrdersRoute && method == "POST")
@@ -253,6 +262,7 @@ public sealed class ApiContractTests(PostgresFixture database)
     private const string SignInRoute = "/api/auth/telegram";
     private const string RateRoute = "/api/rate";
     private const string OrdersRoute = "/api/orders";
+    private const string WebhookRoute = "/api/bot/webhook";
 
     private static JsonContent OrderBody() => JsonContent.Create(new Dictionary<string, string>
     {

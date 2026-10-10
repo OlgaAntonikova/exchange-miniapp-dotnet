@@ -11,6 +11,13 @@ public sealed class NoBotClient : IBotClient
 
     /// <inheritdoc />
     public Task AnswerCallbackAsync(string callbackQueryId, string? notice, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task DeleteWebhookAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<System.Text.Json.JsonElement>> GetUpdatesAsync(long offset, int waitSeconds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<System.Text.Json.JsonElement>>([]);
 }
 
 /// <summary>Wires the bot client, the message builder, the notification queue and its dispatcher.</summary>
@@ -25,16 +32,35 @@ public static class BotSetup
     /// <summary>The service key of the bot's HTTP client.</summary>
     public const string ClientKey = "telegram-bot";
 
+    /// <summary>The service key of the poller's HTTP client, which outlasts a long poll.</summary>
+    public const string PollClientKey = "telegram-poll";
+
+    /// <summary>How long one <c>getUpdates</c> call may take: the long poll and a margin.</summary>
+    public const int PollRequestTimeoutSeconds = BotPoller.LongPollSeconds + 10;
+
     /// <summary>The client Bot API calls go through (a plain singleton, D-035).</summary>
-    public static HttpClient CreateClient() => new(RateSetup.CreateHandler())
+    public static HttpClient CreateClient(int timeoutSeconds = RequestTimeoutSeconds) => new(RateSetup.CreateHandler())
     {
-        Timeout = TimeSpan.FromSeconds(RequestTimeoutSeconds),
+        Timeout = TimeSpan.FromSeconds(timeoutSeconds),
         MaxResponseContentBufferSize = MaxResponseBytes,
     };
 
-    /// <summary>Registers the bot's services.</summary>
-    public static IServiceCollection AddBot(this IServiceCollection services)
+    /// <summary>Registers the bot's services; with <paramref name="poll"/>, also the development poller.</summary>
+    public static IServiceCollection AddBot(this IServiceCollection services, bool poll = false)
     {
+        if (poll)
+        {
+            services.AddKeyedSingleton(PollClientKey, (_, _) => CreateClient(PollRequestTimeoutSeconds));
+            services.AddHostedService(provider => new BotPoller(
+                provider.GetRequiredService<AppSettings>().BotToken is { } token
+                    ? new TelegramBotClient(provider.GetRequiredKeyedService<HttpClient>(PollClientKey), token)
+                    : new NoBotClient(),
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<AppSettings>(),
+                provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ILogger<BotPoller>>()));
+        }
+
         services.AddKeyedSingleton(ClientKey, (_, _) => CreateClient());
         services.AddSingleton<IBotClient>(provider => provider.GetRequiredService<AppSettings>().BotToken is { } token
             ? new TelegramBotClient(provider.GetRequiredKeyedService<HttpClient>(ClientKey), token)
@@ -44,6 +70,7 @@ public static class BotSetup
         services.AddHostedService(provider => provider.GetRequiredService<NotificationDispatcher>());
         services.AddScoped<BotMessages>();
         services.AddScoped<OrderNotifications>();
+        services.AddScoped<IBotUpdateHandler, BotUpdates>();
         return services;
     }
 }

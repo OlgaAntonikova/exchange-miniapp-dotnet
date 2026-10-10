@@ -294,6 +294,17 @@ public sealed class NotificationTests(PostgresFixture database)
             return Task.CompletedTask;
         }
 
-        public Task AnswerCallbackAsync(string callbackQueryId, string? notice, CancellationToken cancellationToken) => Task.CompletedTask;
+        public ConcurrentQueue<(string Id, string? Notice)> Answers { get; } = new();
+
+        public Task AnswerCallbackAsync(string callbackQueryId, string? notice, CancellationToken cancellationToken)
+        {
+            Answers.Enqueue((callbackQueryId, notice));
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteWebhookAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<System.Text.Json.JsonElement>> GetUpdatesAsync(long offset, int waitSeconds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<System.Text.Json.JsonElement>>([]);
     }
 }

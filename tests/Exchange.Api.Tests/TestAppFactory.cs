@@ -45,6 +45,7 @@ public class TestAppFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.AddKeyedSingleton(Exchange.Api.Bot.BotSetup.ClientKey, (_, _) => new HttpClient(new NoNetworkHandler()));
+            services.AddKeyedSingleton(Exchange.Api.Bot.BotSetup.PollClientKey, (_, _) => new HttpClient(new NoNetworkHandler()));
             services.AddKeyedSingleton(Exchange.Api.Alerts.TelegramAlertSetup.ClientKey, (_, _) => new HttpClient(new NoNetworkHandler()));
         });
 

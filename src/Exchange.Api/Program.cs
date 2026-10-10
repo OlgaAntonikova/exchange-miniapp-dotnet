@@ -64,7 +64,7 @@ try
     builder.Services.AddExchangeRates();
     builder.Services.AddScoped<Pricer>();
     builder.Services.AddScoped<OrderTransitions>();
-    builder.Services.AddBot();
+    builder.Services.AddBot(poll: args is [BotPoller.Command]);
 
     // The page's own locale file, copied beside the assembly, read once; a missing key fails the
     // start (spec 1.7).
@@ -124,6 +124,7 @@ try
     app.MapAuthEndpoints();
     app.MapRateEndpoints();
     app.MapOrderEndpoints();
+    app.MapBotEndpoints(app.Services.GetRequiredService<AppSettings>());
 
     await app.RunAsync().ConfigureAwait(false);
     return ExitSuccess;

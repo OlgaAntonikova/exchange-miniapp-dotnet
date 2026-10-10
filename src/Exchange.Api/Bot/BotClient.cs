@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using Exchange.Api.Settings;
 
 namespace Exchange.Api.Bot;
@@ -46,6 +47,14 @@ public interface IBotClient
     /// <summary>Answers a button press, optionally with a short notice shown to the presser.</summary>
     /// <exception cref="BotException">Telegram did not accept it.</exception>
     Task AnswerCallbackAsync(string callbackQueryId, string? notice, CancellationToken cancellationToken);
+
+    /// <summary>Removes the registered webhook, which Telegram requires before <c>getUpdates</c>.</summary>
+    /// <exception cref="BotException">Telegram did not accept it.</exception>
+    Task DeleteWebhookAsync(CancellationToken cancellationToken);
+
+    /// <summary>The button presses from <paramref name="offset"/> on, waiting up to <paramref name="waitSeconds"/> for one.</summary>
+    /// <exception cref="BotException">Telegram did not accept it.</exception>
+    Task<IReadOnlyList<JsonElement>> GetUpdatesAsync(long offset, int waitSeconds, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -88,7 +97,19 @@ public sealed class TelegramBotClient(HttpClient client, Secret botToken) : IBot
         return CallAsync("answerCallbackQuery", body, cancellationToken);
     }
 
-    private async Task CallAsync(string method, Dictionary<string, object> body, CancellationToken cancellationToken)
+    /// <inheritdoc />
+    public Task DeleteWebhookAsync(CancellationToken cancellationToken) =>
+        CallAsync("deleteWebhook", new Dictionary<string, object> { ["drop_pending_updates"] = false }, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<JsonElement>> GetUpdatesAsync(long offset, int waitSeconds, CancellationToken cancellationToken)
+    {
+        var body = new Dictionary<string, object> { ["offset"] = offset, ["timeout"] = waitSeconds, ["allowed_updates"] = new[] { "callback_query" } };
+        var result = await CallAsync("getUpdates", body, cancellationToken).ConfigureAwait(false);
+        return result.ValueKind == JsonValueKind.Array ? [.. result.EnumerateArray()] : throw new BotException("not_ok");
+    }
+
+    private async Task<JsonElement> CallAsync(string method, Dictionary<string, object> body, CancellationToken cancellationToken)
     {
         var url = new Uri(TelegramApiUrl, "/bot" + botToken.Reveal() + "/" + method);
         string failure;
@@ -104,7 +125,7 @@ public sealed class TelegramBotClient(HttpClient client, Secret botToken) : IBot
                 var answer = await response.Content.ReadFromJsonAsync<BotAnswer>(cancellationToken).ConfigureAwait(false);
                 if (answer is { Ok: true })
                 {
-                    return;
+                    return answer.Result;
                 }
 
                 failure = "not_ok";
@@ -127,5 +148,5 @@ public sealed class TelegramBotClient(HttpClient client, Secret botToken) : IBot
         throw new BotException(failure);
     }
 
-    private sealed record BotAnswer(bool Ok);
+    private sealed record BotAnswer(bool Ok, JsonElement Result);
 }
