@@ -607,6 +607,20 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
 - Gate: an order placed via the API appears in the operator chat; pressing Confirm, then
   Processing, then Complete (the buttons offer only the transitions of section 1.5) updates the
   order and messages the client each time; a press from a non-operator account changes nothing.
+- **Closed 2026-10-10**, approved by the owner. Pull requests #24 (the status machine, `D-037`),
+  #25 (placing and reading orders, `D-038`), #26 (the transition function and the client's
+  cancel, `D-039`), #27 (the bot's messages and their delivery, `D-040`), #28 (operator buttons,
+  the bot webhook and the development poller, `D-041`) and #29 (review follow-ups), each with a
+  clean-context review and green CI. Gate run on `dev` at `2dc12c4`, 1313/1313 tests, the app in
+  `test` mode with the poller on an empty `postgres:16.15-alpine`, the owner's account as the
+  client and the operator chat. With a stranger's id as the only operator, an order placed via
+  the API answered 201 `PENDING` and its message with buttons reached the operator chat; the
+  owner pressed Confirm, the bot answered that the press is not allowed, the order stayed
+  `PENDING` with one history row, and the refusal was logged as `not_an_operator`. Restarted with
+  the owner as the operator, the owner pressed Confirm, Processing and Complete: the order ended
+  `COMPLETED` with `closed_at` set, the history held `PENDING` by `system` and the three moves by
+  `operator`, three client and three operator messages were sent with no delivery failure, and
+  the logs held no bot token and no JWT.
 
 ### PHASE-5 - Mini App front end and demo mode
 
