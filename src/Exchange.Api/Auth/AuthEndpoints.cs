@@ -164,6 +164,9 @@ public static partial class AuthEndpoints
         return user is null ? (null, Refusal("unknown_user")) : (user, null);
     }
 
+    /// <summary>The 401 of INV-21, logged at WARNING with <paramref name="reason"/>: the same for every route and reason.</summary>
+    public static IResult Unauthorized(string reason) => new RefusalResult(reason);
+
     private static RefusalResult Refusal(string reason) => new(reason);
 
     private static async Task RefuseAsync(HttpContext http, string reason)

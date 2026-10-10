@@ -28,5 +28,7 @@
   "label_wallet_address": "Кошелёк",
   "label_payment_purpose": "Назначение платежа",
   "transfer_now": "Сейчас",
-  "transfer_at_meeting": "При встрече"
+  "transfer_at_meeting": "При встрече",
+  "press_not_allowed": "Действие недоступно.",
+  "press_outdated": "Статус уже изменился, обновите заявку."
 }

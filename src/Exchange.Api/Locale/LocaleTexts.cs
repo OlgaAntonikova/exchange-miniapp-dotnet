@@ -21,6 +21,12 @@ public static class LocaleKeys
     /// <summary>The client's message about a status change: <c>{order_id}</c>, <c>{status}</c>.</summary>
     public const string ClientStatusChanged = "client_status_changed";
 
+    /// <summary>The answer to a button press from someone who is not an operator, or with data that is not ours.</summary>
+    public const string PressNotAllowed = "press_not_allowed";
+
+    /// <summary>The answer to a press of a button whose move no longer applies.</summary>
+    public const string PressOutdated = "press_outdated";
+
     /// <summary>The labels of the operator's message, by field.</summary>
     public static IReadOnlyList<string> Labels { get; } =
     [
@@ -41,7 +47,7 @@ public static class LocaleKeys
     /// <summary>Every key the server reads.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
-        RatesUnavailable, AlertHeader, OperatorNewOrder, OperatorOrderStatus, ClientStatusChanged, .. Labels,
+        RatesUnavailable, AlertHeader, OperatorNewOrder, OperatorOrderStatus, ClientStatusChanged, PressNotAllowed, PressOutdated, .. Labels,
         .. Exchange.Domain.Orders.OrderCodes.AllStatuses.Select(Status),
         .. Enum.GetValues<Exchange.Domain.Orders.OrderStatus>()
             .Where(target => Enum.GetValues<Exchange.Domain.Orders.OrderStatus>().Any(from => Exchange.Domain.Orders.StatusMachine.CanMove(from, target)))

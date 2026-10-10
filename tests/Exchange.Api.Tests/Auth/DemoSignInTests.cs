@@ -10,6 +10,32 @@ namespace Exchange.Api.Tests.Auth;
 public sealed class DemoSignInTests(PostgresFixture database)
 {
     [Fact]
+    public async Task The_bot_webhook_is_not_mapped_in_demo_mode()
+    {
+        var url = await database.CreateDatabaseUrlAsync();
+        TestAppFactory? factory = null;
+        HttpClient? client = null;
+        ProcessEnvironment.With("demo", () =>
+        {
+            factory = new TestAppFactory(TestSettings.Demo(url));
+            client = factory.CreateClient();
+        });
+
+        try
+        {
+            using var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+            using var response = await client!.PostAsync(new Uri("/api/bot/webhook", UriKind.Relative), content, TestContext.Current.CancellationToken);
+
+            response.StatusCode.ShouldBe(System.Net.HttpStatusCode.NotFound);
+        }
+        finally
+        {
+            client?.Dispose();
+            await factory!.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task Telegram_sign_in_is_refused_in_demo_mode()
     {
         var logs = new CapturingSink();

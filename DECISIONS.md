@@ -470,3 +470,22 @@ which alerts the operator; an unexpected exception is an `ERROR` and is not retr
 nothing is sent: each message becomes one `INFO` record naming its kind and order. The text,
 which carries client details, is never logged. Tests never reach Telegram: the test host gives both
 Bot API clients a handler that refuses every request locally.
+
+### D-041 - Button presses, the webhook and the poller
+
+One handler serves the webhook and the development poller. A button press counts only when it
+comes from a Telegram user id in `OPERATOR_TELEGRAM_IDS` and its data is a valid
+`order:<id>:<STATUS>`; the status then changes through the transition function as the operator,
+with the presser's id in the history, and the client and the operator are told (`D-040`). A
+press from anyone else - the order's own client included - or with data that is not ours is
+answered "not allowed"; a press whose move no longer applies, such as an old message's button,
+is answered "outdated"; each is logged at `WARNING` and changes nothing (`INV-11`). Updates
+other than button presses are ignored. The webhook compares `X-Telegram-Bot-Api-Secret-Token`
+with `BOT_WEBHOOK_SECRET` in constant time and answers a missing or wrong one with the 401 of
+`INV-21`; every accepted call is answered 200 `{"ok": true}`, an unreadable body included, so
+Telegram does not deliver it again. The route is not mapped in demo mode. `dotnet run -- poll`
+starts the app as usual plus the poller, which removes the webhook first (Telegram refuses
+`getUpdates` while one is set), long-polls for button presses with a client that outlasts the
+25-second wait, moves past each update before handling it so a failing one is not fetched
+forever, pauses 5 s after a failed poll, and refuses demo mode. It must never run against the
+production bot.
