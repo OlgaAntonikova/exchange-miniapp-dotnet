@@ -9,8 +9,11 @@ public static class LocaleKeys
     /// <summary>The 503 <c>message</c> of spec 1.10.</summary>
     public const string RatesUnavailable = "rates_unavailable";
 
+    /// <summary>The first line of every alert in the operator chat.</summary>
+    public const string AlertHeader = "alert_header";
+
     /// <summary>Every key the server reads.</summary>
-    public static IReadOnlyList<string> All { get; } = [RatesUnavailable];
+    public static IReadOnlyList<string> All { get; } = [RatesUnavailable, AlertHeader];
 }
 
 /// <summary>The locale file could not be used. The message names the key or placeholder, never a text.</summary>

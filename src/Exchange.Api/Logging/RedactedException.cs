@@ -11,8 +11,14 @@ public sealed class RedactedException : Exception
 
     /// <summary>Masks <paramref name="original"/>.</summary>
     public RedactedException(Exception original)
-        : base(LogRedactor.MaskText(original?.Message ?? string.Empty)) =>
+        : base(LogRedactor.MaskText(original?.Message ?? string.Empty))
+    {
         _text = LogRedactor.MaskText(original?.ToString() ?? string.Empty);
+        OriginalTypeName = original?.GetType().Name ?? nameof(Exception);
+    }
+
+    /// <summary>The type name of the exception this stands in for; a type name holds no secret.</summary>
+    public string OriginalTypeName { get; }
 
     /// <summary>Required by the exception pattern; prefer the wrapping constructor.</summary>
     public RedactedException()

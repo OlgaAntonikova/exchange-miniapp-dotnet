@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using Exchange.Api.Locale;
 using Exchange.Api.Rates;
 using Exchange.Api.Settings;
 
@@ -27,7 +28,7 @@ public sealed class AlertDeliveryException : Exception
 }
 
 /// <summary>Delivers alerts to the operator chat through the Telegram Bot API's <c>sendMessage</c> (spec 4, Alerting).</summary>
-public sealed class TelegramAlertChannel(HttpClient client, Secret botToken, long chatId) : IAlertChannel
+public sealed class TelegramAlertChannel(HttpClient client, Secret botToken, long chatId, LocaleTexts texts) : IAlertChannel
 {
     /// <summary>The Bot API's address.</summary>
     public static readonly Uri TelegramApiUrl = new("https://api.telegram.org");
@@ -44,7 +45,8 @@ public sealed class TelegramAlertChannel(HttpClient client, Secret botToken, lon
     public async Task SendAsync(Alert alert, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(alert);
-        var text = alert.Text.Length <= MessageMaxChars ? alert.Text : Cut(alert.Text) + TruncationMark;
+        var message = texts.Text(LocaleKeys.AlertHeader) + "\n" + alert.Text;
+        var text = message.Length <= MessageMaxChars ? message : Cut(message) + TruncationMark;
         var url = new Uri(TelegramApiUrl, "/bot" + botToken.Reveal() + "/sendMessage");
         var body = new Dictionary<string, object> { ["chat_id"] = chatId, ["text"] = text, ["disable_web_page_preview"] = true };
 
@@ -114,7 +116,7 @@ public static class TelegramAlertSetup
         {
             var settings = provider.GetRequiredService<AppSettings>();
             return settings is { BotToken: { } token, OperatorChatId: { } chat }
-                ? new TelegramAlertChannel(provider.GetRequiredKeyedService<HttpClient>(ClientKey), token, chat)
+                ? new TelegramAlertChannel(provider.GetRequiredKeyedService<HttpClient>(ClientKey), token, chat, provider.GetRequiredService<LocaleTexts>())
                 : new NoAlertChannel();
         });
         return services;
