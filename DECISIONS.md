@@ -449,3 +449,24 @@ logged at `WARNING` with the order id and the actor, never with order data. `clo
 app's clock at the change, while the history row's timestamp is the database's `now()`, the
 start of its transaction, which may be before a wait for the lock: the two can differ by that
 wait, and the history row orders the changes.
+
+### D-040 - The bot's messages and their delivery
+
+The Bot API is called with plain JSON POSTs through one client (spec 6.2 forbids `Telegram.Bot`):
+only a 200 answer whose body says `"ok": true` counts, and a failure is a reason code that never
+names the URL, which holds the token (as in `D-035`). Every word of a message comes from
+`ru.json`. The operator's message about a new order names the order, the client (`@username`
+with first name and Telegram id, or the first name and id without a username), the amounts, the
+rate and its provider, the reference rows by name, the USDT transfer time and every detail in full
+- the operator completes the deal by hand - with one button per row for each status
+`StatusMachine` allows next; a button's callback data is `order:<id>:<STATUS>`, well within
+Telegram's 64 bytes. On every status change the client gets a message, and the operator gets a
+new message with the new status and the buttons for what may come next, rather than an edit of
+the old one, so the chat keeps the order's history. Messages go into an in-process outbox of 1000
+(a full outbox drops the message with an `ERROR`), built after the change is committed, so neither
+building nor sending can fail an order. A background dispatcher tries each message 3 times, waiting
+1 s then 2 s; a retry is a `WARNING`, giving up is an `ERROR` naming the operation and the order,
+which alerts the operator; an unexpected exception is an `ERROR` and is not retried. In demo mode
+nothing is sent: each message becomes one `INFO` record naming its kind and order. The text,
+which carries client details, is never logged. Tests never reach Telegram: the test host gives both
+Bot API clients a handler that refuses every request locally.

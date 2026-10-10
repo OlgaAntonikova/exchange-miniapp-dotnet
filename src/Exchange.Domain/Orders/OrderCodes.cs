@@ -98,6 +98,22 @@ public static class OrderCodes
     /// <summary>Parses a channel exactly.</summary>
     public static BankChannel ParseChannel(string text) => Parse(ChannelNames, text, "bank channel");
 
+    /// <summary>The status spelled exactly <paramref name="text"/>, if any.</summary>
+    public static bool TryParseStatus(string? text, out OrderStatus status)
+    {
+        foreach (var (value, name) in StatusNames)
+        {
+            if (string.Equals(name, text, StringComparison.Ordinal))
+            {
+                status = value;
+                return true;
+            }
+        }
+
+        status = default;
+        return false;
+    }
+
     private static TEnum Parse<TEnum>(Dictionary<TEnum, string> names, string text, string what)
         where TEnum : struct, Enum
     {

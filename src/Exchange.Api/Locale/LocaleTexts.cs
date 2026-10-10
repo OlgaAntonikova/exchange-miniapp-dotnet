@@ -12,8 +12,42 @@ public static class LocaleKeys
     /// <summary>The first line of every alert in the operator chat.</summary>
     public const string AlertHeader = "alert_header";
 
+    /// <summary>The operator's message about a new order: <c>{order_id}</c>.</summary>
+    public const string OperatorNewOrder = "operator_new_order";
+
+    /// <summary>The operator's message about a status change: <c>{order_id}</c>, <c>{status}</c>.</summary>
+    public const string OperatorOrderStatus = "operator_order_status";
+
+    /// <summary>The client's message about a status change: <c>{order_id}</c>, <c>{status}</c>.</summary>
+    public const string ClientStatusChanged = "client_status_changed";
+
+    /// <summary>The labels of the operator's message, by field.</summary>
+    public static IReadOnlyList<string> Labels { get; } =
+    [
+        "label_client", "label_gives", "label_receives", "label_rate", "label_city", "label_bank_give", "label_bank_receive",
+        "label_network_give", "label_network_receive", "label_usdt_transfer_time", "label_iban", "label_recipient_name",
+        "label_wallet_address", "label_payment_purpose",
+    ];
+
+    /// <summary>The key of a status's name: <c>status_PENDING</c> and so on.</summary>
+    public static string Status(string statusCode) => "status_" + statusCode;
+
+    /// <summary>The key of the button that moves an order to a status.</summary>
+    public static string Button(string statusCode) => "button_" + statusCode;
+
+    /// <summary>The key of a USDT transfer time's name.</summary>
+    public static string Transfer(string transferCode) => "transfer_" + transferCode;
+
     /// <summary>Every key the server reads.</summary>
-    public static IReadOnlyList<string> All { get; } = [RatesUnavailable, AlertHeader];
+    public static IReadOnlyList<string> All { get; } =
+    [
+        RatesUnavailable, AlertHeader, OperatorNewOrder, OperatorOrderStatus, ClientStatusChanged, .. Labels,
+        .. Exchange.Domain.Orders.OrderCodes.AllStatuses.Select(Status),
+        .. Enum.GetValues<Exchange.Domain.Orders.OrderStatus>()
+            .Where(target => Enum.GetValues<Exchange.Domain.Orders.OrderStatus>().Any(from => Exchange.Domain.Orders.StatusMachine.CanMove(from, target)))
+            .Select(target => Button(Exchange.Domain.Orders.OrderCodes.Of(target))),
+        .. Exchange.Domain.Directions.Codes.AllTransferTimes.Select(Transfer),
+    ];
 }
 
 /// <summary>The locale file could not be used. The message names the key or placeholder, never a text.</summary>

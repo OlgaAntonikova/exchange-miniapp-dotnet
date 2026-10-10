@@ -96,7 +96,8 @@ public static class TelegramAlertSetup
     /// <summary>How long one delivery may take, in seconds.</summary>
     public const int RequestTimeoutSeconds = 10;
 
-    private const string ClientKey = "telegram-alerts";
+    /// <summary>The service key of the alert channel's HTTP client.</summary>
+    public const string ClientKey = "telegram-alerts";
 
     /// <summary>The largest Bot API answer read; <c>sendMessage</c> answers well under a kilobyte.</summary>
     public const int MaxResponseBytes = 64 * 1024;

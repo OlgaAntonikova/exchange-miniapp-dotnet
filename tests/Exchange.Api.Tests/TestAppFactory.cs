@@ -39,6 +39,15 @@ public class TestAppFactory : WebApplicationFactory<Program>
             builder.UseSetting(key, value);
         }
 
+        // No test reaches Telegram: both Bot API clients get a handler that refuses every request
+        // locally. The channels keep their real types; a test that needs to see what was sent
+        // replaces the channel itself through the services hook.
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddKeyedSingleton(Exchange.Api.Bot.BotSetup.ClientKey, (_, _) => new HttpClient(new NoNetworkHandler()));
+            services.AddKeyedSingleton(Exchange.Api.Alerts.TelegramAlertSetup.ClientKey, (_, _) => new HttpClient(new NoNetworkHandler()));
+        });
+
         if (_logs is not null)
         {
             builder.ConfigureTestServices(services => services.AddSingleton(new LogOutput(_logs)));
@@ -64,4 +73,11 @@ public sealed class DefaultAppFactory : TestAppFactory
         : base(TestSettings.Production())
     {
     }
+}
+
+/// <summary>Refuses every request without touching the network.</summary>
+internal sealed class NoNetworkHandler : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromException<HttpResponseMessage>(new HttpRequestException("no network in tests"));
 }
