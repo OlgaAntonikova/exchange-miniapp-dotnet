@@ -22,6 +22,23 @@ public sealed class RateSetupTests
     }
 
     [Fact]
+    public void Outgoing_clients_renew_their_pooled_connections_every_fifteen_minutes()
+    {
+        using var rateClient = RateSetup.CreateClient(TimeoutSeconds);
+        using var alertClient = Exchange.Api.Alerts.TelegramAlertSetup.CreateClient();
+
+        HandlerOf(rateClient).PooledConnectionLifetime.ShouldBe(TimeSpan.FromMinutes(15));
+        HandlerOf(alertClient).PooledConnectionLifetime.ShouldBe(TimeSpan.FromMinutes(15));
+    }
+
+    // HttpClient keeps the handler it was built with in HttpMessageInvoker's private field; a client
+    // built without one has a SocketsHttpHandler whose lifetime is infinite, which this test refuses.
+    private static System.Net.Http.SocketsHttpHandler HandlerOf(HttpClient client) =>
+        (System.Net.Http.SocketsHttpHandler)typeof(HttpMessageInvoker)
+            .GetField("_handler", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(client)!;
+
+    [Fact]
     public void A_source_client_has_the_fetch_timeout_and_a_one_mebibyte_body_limit()
     {
         using var client = RateSetup.CreateClient(TimeoutSeconds);

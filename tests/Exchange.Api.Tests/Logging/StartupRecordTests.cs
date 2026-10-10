@@ -1,3 +1,4 @@
+using Exchange.Api.Alerts;
 using Exchange.Api.Logging;
 using Exchange.Api.Tests.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,14 +64,14 @@ public sealed class StartupRecordTests
     [Fact]
     public async Task An_error_in_the_app_reaches_the_alert_channel()
     {
-        var logs = new CapturingSink();
-        using var factory = new TestAppFactory(TestSettings.Production(), logs);
+        var channel = new RecordingAlertChannel();
+        using var factory = new TestAppFactory(TestSettings.Production(), services: services => services.AddSingleton<IAlertChannel>(channel));
         using var client = factory.CreateClient();
 
         ProbeError(factory.Services.GetRequiredService<ILogger<StartupRecordTests>>(), null);
 
-        (await WaitForAsync(() => logs.Text.Contains("Alert for", StringComparison.Ordinal))).ShouldBeTrue("the alert dispatcher never saw the error");
-        logs.Text.ShouldContain("Probe failure for the alert path");
+        (await WaitForAsync(() => !channel.Alerts.IsEmpty)).ShouldBeTrue("the alert dispatcher never delivered the error");
+        channel.Alerts.ShouldContain(alert => alert.Text.Contains("Probe failure for the alert path", StringComparison.Ordinal));
     }
 
     private static async Task<bool> WaitForAsync(Func<bool> condition)
@@ -86,5 +87,17 @@ public sealed class StartupRecordTests
         }
 
         return condition();
+    }
+}
+
+/// <summary>An alert channel that keeps what it was given.</summary>
+internal sealed class RecordingAlertChannel : IAlertChannel
+{
+    public System.Collections.Concurrent.ConcurrentQueue<Alert> Alerts { get; } = new();
+
+    public Task SendAsync(Alert alert, CancellationToken cancellationToken)
+    {
+        Alerts.Enqueue(alert);
+        return Task.CompletedTask;
     }
 }
