@@ -1,4 +1,5 @@
 using Exchange.Api.Auth;
+using Exchange.Api.Bot;
 using Exchange.Api.Data;
 using Exchange.Api.Locale;
 using Exchange.Api.Pricing;
@@ -80,7 +81,7 @@ public static partial class OrderEndpoints
     /// <summary>Maps <c>POST /api/orders</c>, <c>GET /api/orders</c>, <c>GET /api/orders/{order_id}</c> and <c>POST /api/orders/{order_id}/cancel</c>.</summary>
     public static IEndpointRouteBuilder MapOrderEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost(OrdersRoute, async (HttpContext http, ExchangeDbContext db, Pricer pricer, AppSettings settings, LocaleTexts texts) =>
+        app.MapPost(OrdersRoute, async (HttpContext http, ExchangeDbContext db, Pricer pricer, AppSettings settings, LocaleTexts texts, OrderNotifications notifications) =>
         {
             var (user, refusal) = await AuthEndpoints.CallerAsync(http, db).ConfigureAwait(false);
             if (user is null)
@@ -97,6 +98,9 @@ public static partial class OrderEndpoints
                 var receive = Codes.Of(order.Receive);
                 var logger = Logger(http);
                 LogCreated(logger, order.Id, give, receive, order.RateProvider);
+
+                // Queued after the commit and never failing the order: the operator's message.
+                await notifications.OrderCreatedAsync(order, user).ConfigureAwait(false);
                 return Results.Created(OrdersRoute + "/" + order.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), Out(order));
             }
             catch (PricingException refused)
@@ -140,7 +144,7 @@ public static partial class OrderEndpoints
             return Results.Ok(Out(order));
         }).RequireAuthorization();
 
-        app.MapPost(OrdersRoute + "/{order_id}/cancel", async (string order_id, HttpContext http, ExchangeDbContext db, OrderTransitions transitions) =>
+        app.MapPost(OrdersRoute + "/{order_id}/cancel", async (string order_id, HttpContext http, ExchangeDbContext db, OrderTransitions transitions, OrderNotifications notifications) =>
         {
             var (user, refusal) = await AuthEndpoints.CallerAsync(http, db).ConfigureAwait(false);
             if (user is null)
@@ -157,6 +161,11 @@ public static partial class OrderEndpoints
 
             // A missing or someone else's order is logged by the transition function.
             var result = await transitions.ChangeAsync(id, OrderStatus.Cancelled, Actor.Client, user.TelegramId, user.Id, http.RequestAborted).ConfigureAwait(false);
+            if (result.Outcome == TransitionOutcome.Changed)
+            {
+                notifications.StatusChanged(result.Order!, user);
+            }
+
             return result.Outcome switch
             {
                 TransitionOutcome.Changed => Results.Ok(Out(result.Order!)),

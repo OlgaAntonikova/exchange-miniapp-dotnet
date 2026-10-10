@@ -1,6 +1,7 @@
 using System.Net;
 using Exchange.Api.Alerts;
 using Exchange.Api.Auth;
+using Exchange.Api.Bot;
 using Exchange.Api.Data;
 using Exchange.Api.Json;
 using Exchange.Api.Locale;
@@ -63,6 +64,7 @@ try
     builder.Services.AddExchangeRates();
     builder.Services.AddScoped<Pricer>();
     builder.Services.AddScoped<OrderTransitions>();
+    builder.Services.AddBot();
 
     // The page's own locale file, copied beside the assembly, read once; a missing key fails the
     // start (spec 1.7).

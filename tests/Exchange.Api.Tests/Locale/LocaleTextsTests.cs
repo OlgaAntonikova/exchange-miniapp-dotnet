@@ -82,7 +82,18 @@ public sealed class LocaleTextsTests
 
         var texts = LocaleTexts.Load(json, LocaleKeys.All);
 
-        LocaleKeys.All.ShouldAllBe(key => texts.Text(key, null).Length > 0);
+        // Each key the server reads takes exactly these placeholders; any other key takes none.
+        var placeholders = new Dictionary<string, string[]>
+        {
+            [LocaleKeys.OperatorNewOrder] = ["order_id"],
+            [LocaleKeys.OperatorOrderStatus] = ["order_id", "status"],
+            [LocaleKeys.ClientStatusChanged] = ["order_id", "status"],
+        };
+        foreach (var key in LocaleKeys.All)
+        {
+            var values = placeholders.GetValueOrDefault(key, []).ToDictionary(name => name, name => "x");
+            texts.Text(key, values).Length.ShouldBePositive(key);
+        }
         using var document = JsonDocument.Parse(json);
         document.RootElement.EnumerateObject().ShouldNotBeEmpty();
     }
