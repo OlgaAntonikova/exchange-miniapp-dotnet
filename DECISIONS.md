@@ -358,3 +358,15 @@ file; it is loaded at startup, and a missing key fails the start. A text's `{nam
 must match the values given exactly, or the call fails. The file holds only the keys the server
 uses so far; the page's keys arrive with the front end in `PHASE-5`. Each rate source's client and
 cache service are keyed singletons, so the container disposes them with the app.
+
+### D-034 - What the detail field rules count and refuse
+
+The rules of spec 1.1 are pure functions in `Exchange.Domain` (`DetailFieldRules`) that normalize
+and accept or refuse; a refusal carries no value. "Whitespace" is Unicode whitespace
+(`char.IsWhiteSpace`), so a no-break space or a tab collapses like a space. Lengths of the
+recipient name and the payment purpose are counted in characters (code points), not UTF-16 units,
+so an emoji counts once. "No control characters" also refuses format characters (Unicode
+category `Cf`, such as a right-to-left override or a zero-width space, which would change what the
+operator reads in the chat) and a lone surrogate. The IBAN must be ASCII letters and digits after
+upper-casing, and its MOD 97-10 check is computed digit by digit. The mask uses three ASCII dots,
+as spec 1.5 writes it (`ME25...8951`).
