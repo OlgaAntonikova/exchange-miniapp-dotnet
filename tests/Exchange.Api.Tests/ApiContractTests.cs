@@ -128,6 +128,9 @@ public sealed class ApiContractTests(PostgresFixture database)
         ("POST", "/api/bot/webhook", "/api/bot/webhook", false, HttpStatusCode.OK, false, WebhookShape, Served.OutsideDemo),
     ];
 
+    /// <summary>The routes that serve the page rather than the API (spec 1.7, INV-18), mapped in every mode.</summary>
+    internal static readonly (string Method, string Route)[] PageRoutes = [("GET", "/")];
+
     /// <summary>Where a route of the table is mapped.</summary>
     internal enum Served
     {
@@ -235,7 +238,7 @@ public sealed class ApiContractTests(PostgresFixture database)
 
         var mapped = MappedRoutes(factory.Services.GetRequiredService<EndpointDataSource>());
 
-        mapped.ShouldBe(OutsideDemo().Select(row => (row.Method, row.Route)), ignoreOrder: true);
+        mapped.ShouldBe(OutsideDemo().Select(row => (row.Method, row.Route)).Concat(PageRoutes), ignoreOrder: true);
     }
 
     [Fact]

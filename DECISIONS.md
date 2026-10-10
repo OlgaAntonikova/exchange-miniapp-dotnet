@@ -505,3 +505,16 @@ host the app outside demo mode, and `DemoModeTests` checks the demo row's shape 
 maps exactly the rows served there. The demo refusals of `INV-16` are checked on the real process,
 as `docker compose` starts it, because the in-memory host does not surface a failed start: one
 `FATAL` line naming the variable and never its value, then exit code 1 (`D-020`).
+
+### D-043 - How the page is served
+
+The page's files are copied beside the assembly at build, and the host's web root is that
+`wwwroot`, the same place the server reads the locale file from: whatever directory the app
+starts in (the gate scripts, `docker compose`, a test host), it serves the files it was built
+with; a test starts the real process from an empty directory and gets the page. `wwwroot` is
+served at `/static` by the static-file middleware, which reaches nothing
+outside it, and `GET /` answers `index.html`; every answer carries `Cache-Control: no-cache`.
+`GET /` is a page route, not a row of the API table: the contract tests accept it beside the
+table's rows in every mode, and a request for a static file logs its route as `(unmatched)`,
+since it reaches no endpoint (`D-019`). The page's code is the plain HTML, CSS and JavaScript of
+`D-004`, and its texts are `ru.json`'s keys, held by `FrontendScanTests` (`INV-18`).
