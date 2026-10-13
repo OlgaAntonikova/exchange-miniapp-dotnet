@@ -667,6 +667,16 @@ Deferred; not part of v1 (`L-3`). Kept so that the scope stays visible.
   live ECB and Bank of Russia rates and the history shows both; a second `docker compose up`
   starts with an empty history; the owner has read the README. Then the owner releases `dev`
   into `main` and makes the repository public - both are hers (`RULE-GIT`).
+- **Closed 2026-10-13**, approved by the owner. Pull requests #35 (the demo image and compose
+  file, `D-044`) and #36 (the portfolio README, the screenshots and the publication checklist),
+  each with a clean-context review and green CI. Gate run on `dev` at `83edbd1`, 1377/1377 tests.
+  The agent ran it first on a fresh clone with no `.env`: `docker compose up` alone started the
+  demo, with no warning in the app's log; both orders were placed through the API at live rates,
+  and after a restart the history was empty. The owner then ran it on a clean clone: in a desktop
+  browser at `http://localhost:8000` she placed `RUB_WIRE -> EUR_CASH` and `USDT -> EUR_ATM`
+  orders at live ECB and Bank of Russia rates, the history showed both, and after a restart the
+  history was empty. The owner read the README and the checklist. Releasing `dev` into `main` and making the repository
+  public remain the owner's, by `docs/PUBLISHING.md`.
 
 ---
 
