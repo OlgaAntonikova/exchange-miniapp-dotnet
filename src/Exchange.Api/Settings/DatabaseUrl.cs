@@ -64,6 +64,10 @@ public static class DatabaseUrl
             ["Host"] = uri.DnsSafeHost,
             ["Port"] = uri.Port == NoPort ? DefaultPort : uri.Port,
             ["Database"] = database,
+
+            // No Kerberos: the app signs in with a password or trust (D-044), and on Linux probing
+            // for GSS encryption makes Npgsql load a Kerberos library the image does not carry.
+            ["GSS Encryption Mode"] = "Disable",
         };
 
         var hasPassword = false;

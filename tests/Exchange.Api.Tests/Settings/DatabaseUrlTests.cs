@@ -21,6 +21,7 @@ public sealed class DatabaseUrlTests
         parts["username"].ShouldBe("exchange");
         parts["password"].ShouldBe("p@ss:word");
         parts["ssl mode"].ShouldBe("Require");
+        parts["gss encryption mode"].ShouldBe("Disable");
     }
 
     [Theory]

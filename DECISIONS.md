@@ -518,3 +518,21 @@ outside it, and `GET /` answers `index.html`; every answer carries `Cache-Contro
 table's rows in every mode, and a request for a static file logs its route as `(unmatched)`,
 since it reaches no endpoint (`D-019`). The page's code is the plain HTML, CSS and JavaScript of
 `D-004`, and its texts are `ru.json`'s keys, held by `FrontendScanTests` (`INV-18`).
+
+### D-044 - The demo image and compose file
+
+The image is built in two stages from the pinned images of section 6: the SDK of `global.json`
+restores and publishes in `Release` (with `.editorconfig`, whose analyzer settings the build
+enforces, `D-022`), and the ASP.NET Core runtime runs the published app as the image's own
+non-root user (`$APP_UID`). Nothing outside `src/` and the build settings is copied, and
+`.dockerignore` keeps `.env`, `.git`, local settings and the tests out besides. The compose file
+runs the demo of section 1.9: PostgreSQL of the tests' own tag, trusting connections on the
+compose network, with its data on a `tmpfs` and no published port, so every `docker compose up`
+starts empty; the app with `APP_ENV=demo`, a password-less `DATABASE_URL`, and port 8000 published
+on `127.0.0.1` only. `PackagingTests` reads these properties from the files; running the demo is
+the `PHASE-7` gate. A clean container start logs no warning: the runtime image's
+`ASPNETCORE_HTTP_PORTS` is cleared, since the app listens on its own fixed port; the connection
+string disables GSS encryption, which the app never uses and whose probe makes Npgsql look for a
+Kerberos library the image lacks; and ASP.NET Core's data protection, which the authentication
+setup registers but which protects nothing of the app's (its tokens are JWTs under `JWT_SECRET`),
+logs at `ERROR` only, so its warnings about an unpersisted key ring in a container are dropped.

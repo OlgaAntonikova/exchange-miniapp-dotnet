@@ -1,0 +1,31 @@
+# The demo (spec 1.9): `docker compose up`, then open http://localhost:8000 in a browser.
+# Holds no secret. The database trusts connections on this compose network only, publishes no
+# port, and keeps its data in memory (tmpfs), so every `up` starts empty. The app is published
+# on the host's loopback only: the demo sign-in hands a token to anyone who reaches it.
+# Images are pinned by exact tag (RULE-DEPENDENCIES); the database is the one the tests use.
+services:
+  db:
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_DB: exchange
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d exchange"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      APP_ENV: demo
+      DATABASE_URL: postgresql://postgres@db:5432/exchange
+      SERVE_HOST: 0.0.0.0
+      LOG_FORMAT: console
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
