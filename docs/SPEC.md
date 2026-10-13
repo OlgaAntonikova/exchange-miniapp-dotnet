@@ -631,6 +631,18 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   menu button pointed at it), a full order is placed for `RUB_WIRE -> EUR_CASH` and
   `USDT -> EUR_ATM`, and the history shows both; with `APP_ENV=demo` the same two orders are
   placed in a desktop browser.
+- **Closed 2026-10-13**, approved by the owner. Pull requests #31 (the demo sign-in and
+  `DemoModeTests`, `D-042`), #32 (the front end, its serving, `FrontendScanTests` and
+  `WebRootTests`, `D-043`) and #33 (review follow-ups), each with a clean-context review and green
+  CI. Gate run on `dev` at `21702d5`, 1364/1364 tests. Inside Telegram on the owner's phone, with
+  the app in `test` mode behind a `cloudflared` quick tunnel and the bot's menu button pointed at
+  it, the owner placed `RUB_WIRE -> EUR_CASH` and `USDT -> EUR_ATM` orders, both shown in the
+  history, and cancelled another order from the history; every operator message was delivered,
+  the cancel sent its client and operator status messages, no delivery failed, and the logs held
+  no `ERROR`, no bot token and no JWT. With `APP_ENV=demo` on an empty database, the same two
+  orders were placed in a desktop browser and shown in the profile, behind the demo banner;
+  nothing was sent to Telegram, each message was logged as suppressed, and the log held no IBAN
+  or recipient name. The tunnel, the app and the database were stopped after the gate.
 
 ### PHASE-6 - Loyalty and admin panel (deferred)
 
