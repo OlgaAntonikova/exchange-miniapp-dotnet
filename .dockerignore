@@ -1,0 +1,23 @@
+# Never in the image: secrets, local state, build output, tooling (RULE-SECRETS, spec 1.9).
+.env
+.env.*
+**/.env
+.git
+.github
+.claude
+.vs
+.vscode
+.idea
+**/bin
+**/obj
+**/TestResults
+artifacts
+*.binlog
+*.user
+**/Properties/launchSettings.json
+logs
+*.pem
+*.key
+tests
+docs
+*.md

@@ -93,3 +93,446 @@ depending on a parser version or on a hand-written allow-list.
 Demo mode refuses to start beside `BOT_TOKEN`, `BOT_WEBHOOK_SECRET`, `JWT_SECRET` and
 `PII_ENCRYPTION_KEY` (spec 1.9). When `PHASE-6` brings an admin secret, it joins that list in
 the same change.
+
+### D-014 - Invariant globalization
+
+`InvariantGlobalization` is on for every project. Money, rates and dates must be parsed and
+formatted culture-free (spec 1.3, 1.4a), and with globalization invariant no code path can pick
+up the machine's culture by accident - a Russian-locale machine would otherwise turn `1.5` into
+`1,5`. Nothing needs a culture: the Russian texts are data (spec 1.7), and the Bank of Russia's
+`windows-1251` is a code page, which `CodePagesEncodingProvider` serves without ICU.
+
+### D-015 - Test projects do not document their members
+
+`GenerateDocumentationFile` stays on everywhere because `IDE0005` (unnecessary usings) only runs
+on build with it. Test members would then each need an XML comment (`CS1591`); test names are
+written as sentences and are their own documentation, so the test projects suppress `CS1591`
+alone, with the reason beside the suppression (`RULE-BUILD-HYGIENE`).
+
+### D-016 - `DATABASE_URL` accepts one query parameter, `sslmode`
+
+Spec 1.9 has demo mode refuse a password in the URL's query, and a production database may need
+TLS. The converter therefore understands exactly one parameter, `sslmode` (`disable`, `prefer`,
+`require`, `verify-ca`, `verify-full`), given at most once, and refuses any other - `password`
+and `passfile` included - in every environment, not only in demo. For the same reason demo mode
+refuses `PGPASSFILE` beside `PGPASSWORD`; a default `~/.pgpass` cannot be seen from the
+settings, and the demo's database trusts its network and needs none. A setting the app does not
+understand is a setting it cannot be trusted to apply.
+
+### D-017 - `.env` is read in development only, below the process environment
+
+Spec 1.11 reads `.env` in development. `APP_ENV` is read once, from the process environment
+only, and that one value decides ASP.NET Core's environment, whether `.env` is read and the
+settings rules; the loader never reads it from configuration, and a `.env` that sets it is
+refused, so neither a `.env` nor a command-line argument can switch an installation's mode. It
+takes exactly `development`, `test`, `production` or `demo` (`Enum.TryParse` would accept
+`test,production` as a bit-or). `.env` is looked for in the working directory, and its pairs are
+the lowest-priority configuration source: a variable set in the process wins. A malformed line
+stops the start with its line number only, since the line may hold a secret. The test process
+runs with `APP_ENV=test`; tests that need another value switch it inside one collection that
+xUnit runs alone.
+
+### D-018 - Settings are validated after the host is built, and the listening address is an IP
+
+This replaces the Options pattern with `ValidateOnStart` that spec 6 first named (the spec row
+is amended, and the owner approved the amendment on 2026-10-08). The settings are not
+independent sections to bind: demo mode changes which of them are required and which are
+refused, the order limits are checked against each other, and every problem has to be reported
+at once, by name and without its value. A binder plus per-option validators would split those
+rules across types and report them one type at a time. A single loader keeps them in one place
+and testable as a pure function.
+
+`SettingsLoader` runs as the factory of the `AppSettings` singleton, resolved right after
+`Build()` and before the app serves: it then reads the final configuration, the one tests also
+override, and every problem is reported in one exception. Kestrel takes its address from the same
+object, so `SERVE_HOST` must be an IP address or `localhost`; a host name would need a DNS lookup
+at start and is refused.
+
+### D-019 - The request line, and what is quiet
+
+Each request is logged once by Serilog's request logging, as `HTTP <method> <route> responded
+<status> in <ms> ms`, with exactly the properties `method`, `route`, `status` and `duration_ms`
+(spec 4's names); the route is the endpoint's template (`/api/orders/{order_id}`), and the raw
+path is not logged at all: ASP.NET Core's request scope would add `RequestPath` (and its own
+`RequestId`) to every line of a request, so the logging setup drops both properties. A request
+line for a failed request (5xx, or one that ended in an exception) is a `WARNING`: the
+top-level handler has already logged the failure at `ERROR`, and a second `ERROR` would alert
+twice. For the same reason the handler, when the response has already started and the 500 body
+can no longer be sent, aborts the connection instead of rethrowing into the server, which would
+log the failure again. The request middleware is given the app's logger explicitly, since it
+otherwise writes to Serilog's static logger, outside the app's outputs and alerts. The whole
+`Microsoft.AspNetCore` category is raised to `WARNING`, a superset of the `Hosting.Diagnostics`
+category spec 4 names: its other `INFO` lines (endpoint selected, result written) repeat the
+request line and can carry paths.
+
+### D-020 - A failed start: one FATAL line, exit code 1
+
+The bootstrap logger exists before anything else, so a failure to start is logged with the same
+redaction as everything else. Refused settings become one `FATAL` line listing every problem by
+variable name; any other exception is logged `FATAL` with its stack. The process then exits with
+code 1, rather than rethrowing into the runtime's own crash output, which would print the
+exception a second time outside the logger. Because the entry point catches the exception, the
+in-memory test host cannot observe it; `StartupFailureTests` runs the real app as a process and
+checks the exit code and the output instead. This FATAL line is the one place that writes through
+Serilog's static API rather than an `ILogger` with `[LoggerMessage]`: it runs before, or after the
+end of, the host that provides one.
+
+### D-021 - Alerts: behind redaction, queued, delivered off the request path
+
+The alert sink is an output behind the redacting sink, so an alert can never carry what a log
+line could not. It queues at most 100 alerts (`AlertSink.QueueCapacity`) and drops new ones
+when full, recording the drop in Serilog's self-log, so a storm of errors cannot block a
+request or grow memory. The cooldown check and its record happen under one lock, so concurrent
+identical errors still raise one alert. If one output of the redacting sink throws, the others
+still receive the event and the failure goes to the self-log. Delivery runs in a background
+service; until the Telegram client exists (`PHASE-3`) it writes an `INFO` line naming the
+alert's fingerprint. A failed delivery goes to the self-log (stderr) only: logging it would
+raise another alert. In demo mode the sink is not attached.
+
+### D-022 - Generated migrations are reviewed, not restyled
+
+`dotnet ef migrations add` writes code in its own style (block namespaces, constant arrays), which
+the project's analyzers refuse. The migrations folder is marked `generated_code` in
+`.editorconfig`, so analyzers and the formatter skip it: the next generated migration then has
+the same shape as this one, and the review reads the SQL (`dotnet ef migrations script`), which
+is what runs. Hand edits are limited to what generation cannot do - here, the seed of spec 1.2.
+
+### D-023 - How the schema holds PII and its seed
+
+PII columns are `bytea` holding the cipher's token (`PiiCipher`), converted by an EF value
+converter bound to its column name. The converter captures the context's cipher, and EF caches a
+model per context type, so a model cache key that includes the cipher makes each cipher (one per
+process; one per test where tests use their own keys) get its own model rather than another
+process's key. The seed is plain SQL in the migration with no explicit ids, so the identity
+sequences start after it and the first row added later never collides. Demo mode applies the
+migrations from a hosted service registered first, which runs when the host starts - also in
+the in-memory test host, where the entry point stops at `Build()`. Tests run against one
+PostgreSQL container with trust authentication, as the demo's will have, and create a database per
+test. Its image, `postgres:16.15-alpine`, is the exact tag spec 6 asks for; it is fixed here, in
+`PHASE-1`, when the first container arrived (spec 6 had expected it in `PHASE-0`), and the demo's
+compose file will use the same tag.
+
+### D-024 - A first migration logs no ERROR
+
+On a new database EF Core 10 probes the migrations history with a query that fails, and logs the
+failed command at `ERROR` before it creates the table. Every `ERROR` alerts the operator
+(spec 4), so a normal first `migrate` would raise an alert. Creating the history table first did
+not stop the probe. The migration therefore runs on a context of its own whose EF failed-command
+event is logged at `DEBUG`; nothing else is quietened, and the app's own contexts keep the
+default. A migration that really fails still throws, and the caller logs it - the `migrate`
+command and a demo start both end in a `FATAL` line and a non-zero exit (`D-020`), which
+`MigrateCommandTests` checks against an unreachable server.
+
+### D-025 - The vocabulary of the status history
+
+Spec 1.5 records "from, to, actor, timestamp" for every status change. The actors are `client`
+(a cancellation by the client), `operator` (a button in the operator chat), `admin` (the admin
+panel of `PHASE-6`) and `system` (the order's creation, the one row whose `from_status` is NULL).
+They are stored in lower case, like the transfer times and unlike the statuses and codes of the
+API, because they never appear in the API: they are internal labels. `actor_telegram_id` records
+which person pressed a button, since several operators may share the chat
+(`OPERATOR_TELEGRAM_IDS`). The set is a database CHECK, so changing it is a migration.
+
+### D-026 - What the reference endpoints promise beyond the spec
+
+`GET /api/directions` lists the pairs in a fixed order: give codes in the order of spec 1.1
+(`RUB_WIRE`, `USD_CASH`, `EUR_CASH`, `USDT`), and for each the receive codes in the same way;
+field names within a list are sorted. It is built once from the domain table the API enforces,
+so the form never keeps a copy of its own. Reference lists are ordered by id, which is the
+seed's order.
+
+### D-027 - A same-base direction is refused before its fields
+
+When a quote or order request names a same-base direction and also has field problems, the
+same-base refusal (`invalid_direction`) is reported alone: the fields of a direction that cannot
+exist are not meaningful. `Directions.Check` returns it before looking at any field.
+
+### D-028 - What the initData validator refuses beyond the signature and the age
+
+The spec fixes the HMAC check (`INV-1`) and the age (`INV-2`, with a 60-second skew). Around
+them: the data-check-string is every field except `hash` - `signature` included - sorted by key
+in byte order and joined by line feeds, as Telegram's documentation describes the HMAC method
+(the `PHASE-2` gate, with a real `initData`, is the proof); the query is parsed strictly (every
+segment `key=value` with a key, every escape `%XX`, no raw non-ASCII character (Telegram
+percent-encodes it), `+` as a space, the decoded bytes valid UTF-8); a field sent twice is
+refused, since which copy was signed would be ambiguous; input over 8192 characters is refused
+before parsing (a generous margin over a user object and a few short fields); the received hash
+must be the exact lower-case hex, compared in constant time; `auth_date` is plain ASCII digits;
+`user.id` must be a positive JSON integer and `first_name` a string. Every refusal carries a
+short reason code and nothing of the input; parser exceptions, which can quote it, are not
+chained.
+
+### D-029 - The access token, the sign-in body, and the one 401
+
+The spec fixes HS256 and `JWT_TTL_SECONDS`. This decision fixes the claims: exactly `sub`,
+`iat`, `exp` and `aud`, where `sub` is the Telegram user id as a decimal string; `aud` is the
+constant `exchange-miniapp-dotnet`; there is no `iss` (this app is the only issuer and the key is
+its own) and no `nbf`. Validation accepts HS256 only, requires a signature, `exp` and the
+audience, and allows no clock skew; the lifetime check reads the app's `TimeProvider`, not the
+system clock, so expiry is tested at its exact second. A valid token whose subject is not plain
+digits, or names no user, is refused too.
+
+`POST /api/auth/telegram` reads its body itself, up to twice `MaxInitDataChars` bytes: anything that
+is not a JSON object with an `init_data` string - an empty, oversized or malformed body included -
+is the 401 of `INV-21`, like a bad `initData`, rather than a framework 400 with a body the spec does
+not list. Other properties (`user_id`, `telegram_id`) are ignored (`RULE-SERVER-AUTHORITY`). In demo
+mode there is no bot token, so this route always refuses (spec 1.9). A sign-in creates the user or
+refreshes `username` and `first_name` in one `INSERT ... ON CONFLICT` statement, keeping the
+loyalty points.
+
+Every refusal - by the bearer handler's challenge or by an endpoint - writes the same body and
+`WWW-Authenticate: Bearer`, and logs one `WARNING` with a short `Reason` (a code, or the token
+library's exception type name) and nothing of the token or the input.
+
+### D-030 - What the rate engine refuses, and what it leaves to the API
+
+`RateEngine.Quote` is the formula of spec 1.3 and nothing else: it takes mids, markups and the
+discount as given and does no I/O. Besides a same-base direction (`INV-6`) it refuses, with a
+reason code, inputs no quote can come from: a non-positive amount, a negative markup component or
+discount, an applied markup of 100 % or more (nothing would be paid out), a missing or
+non-positive mid, a base rate beyond what a decimal can hold at the rate scale
+(`rate_out_of_range`), and an effective rate that rounds to zero at the rate scale. The total and
+the applied markup are quantized to the percentage scale before they enter the formula - spec 1.3
+quantizes only the rates - so the applied markup a quote reports is the one its effective rate was
+computed from (`INV-4`). A receive amount that quantizes to zero is
+not refused here: it is a valid result of the formula, and turning it into the 422
+`amount_too_small` of section 1.10 belongs to the endpoint, as do the order limits.
+
+### D-031 - How the two rate sources are read
+
+Both providers share one fetch: a GET that only a 200 answer passes, with every failure turned
+into a short reason code that names no URL and no body (`http_<status>`, `transport_<type>`,
+`timeout`); the transport's exception is not chained, since its message quotes the URL. A
+cancellation the caller asked for is passed on as a cancellation, not a failed fetch. XML is
+read with `DtdProcessing.Prohibit` and no resolver (`D-012`), so any document with a DTD is
+`malformed_xml`. Numbers are ASCII digits with an optional fraction after the source's own
+decimal mark - a point for the ECB, a comma for the Bank of Russia, and never the other - and
+must be positive; the Bank of Russia's `Nominal` must be a whole number. Dates are parsed with
+an exact format. The Bank of Russia body is decoded as windows-1251 by the provider itself,
+whatever the document declares, so the parser never picks an encoding; while only ASCII fields
+are read, that decoding cannot be observed, and no test claims to guard it. A snapshot carries
+`ValidUntil`, the start of the day after the last day its effective date may be used, at the
+source's fixed offset (UTC+1 for the ECB, which allows no lead, UTC+3 for the Bank of Russia),
+so a cached snapshot is refused once its window closes, not only when it is fetched.
+
+### D-032 - The rate cache, the freshness guard and the routes
+
+Each source has one `RateService`. It fetches at most once per cache period whether the last
+fetch worked or not, so a dead source is not hit by every request; a caller that gives up
+mid-fetch leaves no attempt behind. The last good snapshot is served while the time since it
+was fetched is at most the source's maximum age - exactly the maximum age is still fresh, which
+settles the one instant where spec 1.4's "younger than" and `RULE-RATE-FRESHNESS`'s "older
+than" differ - and the moment is before its `ValidUntil` (`D-031`); otherwise the answer is
+`RatesUnavailableException` with a reason code and a `WARNING`, never a number. A failed fetch
+is logged at `ERROR` with the provider, the reason and the duration. To give each source its
+own alert on `RATE_ALERT_COOLDOWN_SECONDS`, the alert sink reads two optional event properties:
+`AlertKey`, appended to the fingerprint, and `AlertCooldownSeconds`, a positive whole number of
+seconds that replaces the default cooldown; the rate service sets both for its failures.
+`RateSources` routes USD and EUR to the ECB and RUB to the Bank of Russia, asks each source
+once per quote for only the currencies the direction needs, names the providers it used joined
+by `+` in alphabetical order, and takes the oldest snapshot time. Each source's `HttpClient`
+has the `RATE_FETCH_TIMEOUT_SECONDS` timeout and a 1 MiB response limit.
+
+### D-033 - How POST /api/rate reads a request, and where the server's texts come from
+
+The quote body is read up to 16 KB and parsed with duplicate properties refused, since which
+copy counts would be ambiguous; an unreadable, oversized, non-object or duplicated body is the
+422 `invalid_request` naming `body`. Property names are matched exactly in snake_case: a
+case-insensitive match is not used, so `Give` is a property outside the contract and is ignored
+like `user_id`. A reference id sent as JSON `null` counts as absent, as if the property were
+not there - the form sends `null` for a field it cleared - while any other non-integer is
+refused. The request is checked in stages, and each stage names every field it faults before
+the next one runs: first the values (`give`, `receive`, `amount_give`, then the reference ids
+in the order of section 1.10), then the direction (a same-base pair, then its missing fields
+before the fields it does not use, each group sorted), then the reference rows. A reference id
+must name a row that exists, is active and fits its side (a sender bank `WIRE`/`RUB`/`RU`, an
+ATM bank `ATM`/`EUR`/`ME`, a city in `ME`); every row that does not is listed. The order limits
+of section 1.5 are not applied to a quote: `amount_out_of_range` is an order's refusal, and a
+quote of any valid amount is shown. Once the request is valid, an engine refusal (markups
+reaching 100 %, a broken mid) is the server's fault and is the 500 of section 1.10. The pricing
+path is one class, `Pricer`, which orders will reuse.
+
+The server's texts come from `wwwroot/locale/ru.json`, copied beside the assembly at build and
+publish, so a host started from any directory, the `migrate` command included, reads the same
+file; it is loaded at startup, and a missing key fails the start. A text's `{name}` placeholders
+must match the values given exactly, or the call fails. The file holds only the keys the server
+uses so far; the page's keys arrive with the front end in `PHASE-5`. Each rate source's client and
+cache service are keyed singletons, so the container disposes them with the app.
+
+### D-034 - What the detail field rules count and refuse
+
+The rules of spec 1.1 are pure functions in `Exchange.Domain` (`DetailFieldRules`) that normalize
+and accept or refuse; a refusal carries no value. "Whitespace" is Unicode whitespace
+(`char.IsWhiteSpace`), so a no-break space or a tab collapses like a space. Lengths of the
+recipient name and the payment purpose are counted in characters (code points), not UTF-16 units,
+so an emoji counts once. "No control characters" also refuses format characters (Unicode
+category `Cf`, such as a right-to-left override or a zero-width space, which would change what the
+operator reads in the chat) and a lone surrogate. The IBAN must be ASCII letters and digits after
+upper-casing, and its MOD 97-10 check is computed digit by digit. The mask uses three ASCII dots,
+as spec 1.5 writes it (`ME25...8951`).
+
+### D-035 - Alerts reach the operator chat through the Bot API
+
+This replaces the log-line delivery of `D-021`. Outside demo mode an alert is posted to the Bot
+API's `sendMessage` for `OPERATOR_CHAT_ID` - one plain-text message with link previews off, cut
+to Telegram's 4096-character limit with a `[truncated]` mark (never inside a surrogate pair) -
+through its own `HttpClient` with a 10-second timeout and a 64 KiB reply limit. Only a 200
+answer counts as delivered. The request URL holds the bot token, so a failure becomes a reason
+code (`http_<status>`, `transport_<type>`, `timeout`) and the transport's exception is not
+chained; the dispatcher writes that reason to the self-log (stderr) and never to the log, which
+would raise another alert. A cancellation from a stopping app is not a failed delivery. In demo
+mode the channel does nothing; the sink is not attached there anyway (spec 1.9). No package is
+added: the Bot API is one JSON POST (spec 6.2 forbids `Telegram.Bot`). Spec 6 names
+`IHttpClientFactory` typed clients for outgoing HTTP; this client and the two rate clients
+(`D-032`) are instead plain `HttpClient` singletons, created once and disposed by the
+container. The factory adds a logging handler that writes each request URI, and the Bot API URI
+holds the bot token, so keeping it out of the path removes one way to leak it (the category is
+also raised to `Warning`, spec 4). What the factory's handler rotation gave - fresh DNS for a
+long-lived client - is kept by giving each client a `SocketsHttpHandler` whose pooled
+connections live 15 minutes (the handler's default is forever).
+
+### D-036 - What an alert says
+
+An alert reads as a message, not a log line. Its first line is the `alert_header` text of
+`wwwroot/locale/ru.json` (spec 1.7: the server takes every text it produces from that file), so
+the operator tells an alert apart from the order messages that share the chat in `PHASE-4`. Then
+comes the log record's message with each value as written: Serilog's own rendering quotes strings
+(`"ecb"`), which is noise in a chat, so the alert sink renders the template itself, after
+redaction. If the record has an exception, only its type follows, on its own line - the type of
+the original exception, which the redacting sink keeps beside its masked stand-in. The exception's
+message stays in the log: for a failure with a reason code the alert already says it, and for any
+other it is where a secret would be most likely to hide.
+
+### D-037 - The status machine and who may move an order
+
+The transitions of spec 1.5 are one table in `Exchange.Domain` (`StatusMachine`), the single source
+for the API, the bot's buttons and the transition function. Each status lists its next statuses
+forward first and cancelling last, which is the order the operator's buttons show them in. The
+operator and the admin may make every allowed move; the client may make exactly one, cancelling
+its own `PENDING` order (ownership is the API's check); `system` makes none - it is the actor of
+an order's creation, recorded as a history row with no previous status. `COMPLETED` and
+`CANCELLED` close an order.
+
+### D-038 - How an order is placed and read
+
+`POST /api/orders` reads its body like a quote (`D-033`, now shared as `PricingRefusal`) and
+adds the detail fields, each checked by its rule (`D-034`); the priced fields' faults and the
+details' faults are listed together, priced first, then the details in the order of section
+1.10. A detail sent as JSON `null` or as an empty string counts as absent, as an id does - the
+form sends either for a field it cleared - while any other non-string is refused. The order
+limits of section 1.5 are checked first, before any database or rate lookup, then the request
+takes the one pricing path a quote takes (`Pricer`), so an order is priced exactly as its quote
+was (`INV-4`). The order and its first history row (no previous status, `PENDING`, actor
+`system`) are saved in one transaction. `GET /api/orders` lists the caller's own orders newest
+first, at most 50. An order id in the path is parsed by the endpoint: plain digits that fit a
+32-bit integer, so `abc`, `-1` or `1.5` name no order and answer the 404 of `INV-21` instead of
+a framework 400 with a body the spec does not list; another client's order answers the same 404
+(`INV-3`). The caller is looked up from the token's subject the way `/api/users/me` does it,
+now one shared function that `POST /api/rate` uses too, so a valid signature on a user who does
+not exist is a 401 on every route that needs a token. The rate snapshot time is cut to
+microseconds before it is saved, the precision of `timestamptz`, so the created order and the
+same order read back are identical.
+
+### D-039 - The transition function
+
+Every status change goes through `OrderTransitions.ChangeAsync`: it opens a transaction, reads
+the order with `SELECT ... FOR UPDATE`, so concurrent changes of one order run one after
+another, checks the move against `StatusMachine` for the actor (`D-037`), and writes the new
+status, `closed_at` (cut to microseconds, as `D-038` does for the snapshot time) and the
+history row with the actor's Telegram id, then commits. A refused move writes nothing. For the
+client the order must also be their own; another client's order is reported as not found, so
+`POST /api/orders/{order_id}/cancel` answers the same 404 as for a missing order, and the 409
+`not_cancellable` only for the caller's own order that is no longer `PENDING`. The client's
+cancel and, from the bot, the operator's buttons call this one function; client messages hook
+onto its successful changes. Every refusal - an order not found or a move not allowed - is
+logged at `WARNING` with the order id and the actor, never with order data. `closed_at` is the
+app's clock at the change, while the history row's timestamp is the database's `now()`, the
+start of its transaction, which may be before a wait for the lock: the two can differ by that
+wait, and the history row orders the changes.
+
+### D-040 - The bot's messages and their delivery
+
+The Bot API is called with plain JSON POSTs through one client (spec 6.2 forbids `Telegram.Bot`):
+only a 200 answer whose body says `"ok": true` counts, and a failure is a reason code that never
+names the URL, which holds the token (as in `D-035`). Every word of a message comes from
+`ru.json`. The operator's message about a new order names the order, the client (`@username`
+with first name and Telegram id, or the first name and id without a username), the amounts, the
+rate and its provider, the reference rows by name, the USDT transfer time and every detail in full
+- the operator completes the deal by hand - with one button per row for each status
+`StatusMachine` allows next; a button's callback data is `order:<id>:<STATUS>`, well within
+Telegram's 64 bytes. On every status change the client gets a message, and the operator gets a
+new message with the new status and the buttons for what may come next, rather than an edit of
+the old one, so the chat keeps the order's history. Messages go into an in-process outbox of 1000
+(a full outbox drops the message with an `ERROR`), built after the change is committed, so neither
+building nor sending can fail an order. A background dispatcher tries each message 3 times, waiting
+1 s then 2 s; a retry is a `WARNING`, giving up is an `ERROR` naming the operation and the order,
+which alerts the operator; an unexpected exception is an `ERROR` and is not retried. In demo mode
+nothing is sent: each message becomes one `INFO` record naming its kind and order. The text,
+which carries client details, is never logged. Tests never reach Telegram: the test host gives both
+Bot API clients a handler that refuses every request locally.
+
+### D-041 - Button presses, the webhook and the poller
+
+One handler serves the webhook and the development poller. A button press counts only when it
+comes from a Telegram user id in `OPERATOR_TELEGRAM_IDS` and its data is a valid
+`order:<id>:<STATUS>`; the status then changes through the transition function as the operator,
+with the presser's id in the history, and the client and the operator are told (`D-040`). A
+press from anyone else - the order's own client included - or with data that is not ours is
+answered "not allowed"; a press whose move no longer applies, such as an old message's button,
+is answered "outdated"; each is logged at `WARNING` and changes nothing (`INV-11`). Updates
+other than button presses are ignored. The webhook compares `X-Telegram-Bot-Api-Secret-Token`
+with `BOT_WEBHOOK_SECRET` in constant time and answers a missing or wrong one with the 401 of
+`INV-21`; every accepted call is answered 200 `{"ok": true}`, an unreadable body included, so
+Telegram does not deliver it again. The route is not mapped in demo mode. `dotnet run -- poll`
+starts the app as usual plus the poller, which removes the webhook first (Telegram refuses
+`getUpdates` while one is set), long-polls for button presses with a client that outlasts the
+25-second wait, moves past each update before handling it so a failing one is not fetched
+forever, pauses 5 s after a failed poll, and refuses demo mode. It refuses
+`APP_ENV=production`, so it can never remove the production bot's webhook. Once a change is
+committed, the client's message and the press's answer no longer depend on the request's
+cancellation.
+
+### D-042 - The demo sign-in and how demo mode is checked
+
+`POST /api/auth/demo` exists only when `APP_ENV=demo`: outside demo mode the route is not mapped,
+so it answers the ordinary 404 and touches nothing (`INV-15`). It needs no body. It signs the
+browser in as one fixed demo user, Telegram id 100 with the first name `Demo` and no username,
+created on the first call and the same user on every later one, with the same upsert as the
+Telegram sign-in; the token is the one `POST /api/auth/telegram` issues, under demo mode's random
+key. Each sign-in is logged at `INFO`. The API table in `ApiContractTests` records where each row
+is served (everywhere, outside demo, demo only), so no row is left pending: the contract tests
+host the app outside demo mode, and `DemoModeTests` checks the demo row's shape and that demo mode
+maps exactly the rows served there. The demo refusals of `INV-16` are checked on the real process,
+as `docker compose` starts it, because the in-memory host does not surface a failed start: one
+`FATAL` line naming the variable and never its value, then exit code 1 (`D-020`).
+
+### D-043 - How the page is served
+
+The page's files are copied beside the assembly at build, and the host's web root is that
+`wwwroot`, the same place the server reads the locale file from: whatever directory the app
+starts in (the gate scripts, `docker compose`, a test host), it serves the files it was built
+with; a test starts the real process from an empty directory and gets the page. `wwwroot` is
+served at `/static` by the static-file middleware, which reaches nothing
+outside it, and `GET /` answers `index.html`; every answer carries `Cache-Control: no-cache`.
+`GET /` is a page route, not a row of the API table: the contract tests accept it beside the
+table's rows in every mode, and a request for a static file logs its route as `(unmatched)`,
+since it reaches no endpoint (`D-019`). The page's code is the plain HTML, CSS and JavaScript of
+`D-004`, and its texts are `ru.json`'s keys, held by `FrontendScanTests` (`INV-18`).
+
+### D-044 - The demo image and compose file
+
+The image is built in two stages from the pinned images of section 6: the SDK of `global.json`
+restores and publishes in `Release` (with `.editorconfig`, whose analyzer settings the build
+enforces, `D-022`), and the ASP.NET Core runtime runs the published app as the image's own
+non-root user (`$APP_UID`). Nothing outside `src/` and the build settings is copied, and
+`.dockerignore` keeps `.env`, `.git`, local settings and the tests out besides. The compose file
+runs the demo of section 1.9: PostgreSQL of the tests' own tag, trusting connections on the
+compose network, with its data on a `tmpfs` and no published port, so every `docker compose up`
+starts empty; the app with `APP_ENV=demo`, a password-less `DATABASE_URL`, and port 8000 published
+on `127.0.0.1` only. `PackagingTests` reads these properties from the files; running the demo is
+the `PHASE-7` gate. A clean container start logs no warning: the runtime image's
+`ASPNETCORE_HTTP_PORTS` is cleared, since the app listens on its own fixed port; the connection
+string disables GSS encryption, which the app never uses and whose probe makes Npgsql look for a
+Kerberos library the image lacks; and ASP.NET Core's data protection, which the authentication
+setup registers but which protects nothing of the app's (its tokens are JWTs under `JWT_SECRET`),
+logs at `ERROR` only, so its warnings about an unpersisted key ring in a container are dropped.

@@ -1,0 +1,18 @@
+<Project>
+
+  <!-- Shared build settings for every project (spec 6, RULE-BUILD-HYGIENE). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Money, rates and dates are formatted and parsed culture-free everywhere; no code path may
+         depend on the machine's culture (spec 1.3, 1.4a). -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

@@ -8,8 +8,9 @@
   "notes": [
     "Do NOT add --nologo to the test command: under Microsoft.Testing.Platform, which xunit.v3 runs on,",
     "it reports zero tests and exits 5, so the stop gate would block every session with a false red (D-009).",
-    "Integration tests (tests/Exchange.Api.Tests) need Docker Desktop running: Testcontainers starts PostgreSQL.",
-    "No fastTest yet: the guard refuses 'dotnet ... --project', and a trait filter is decided in PHASE-0 once measured.",
-    "Until PHASE-0 lands the solution, build and test fail: there is nothing to build yet."
+    "A test project that discovers no test exits 8 and fails the run; every test project has real tests.",
+    "Integration tests (tests/Exchange.Api.Tests) need Docker Desktop running once Testcontainers arrives (PHASE-1).",
+    "No fastTest: the guard refuses 'dotnet ... --project', and the full suite runs in seconds.",
+    "CI also runs 'dotnet format --verify-no-changes'; run it locally before every push."
   ]
 }

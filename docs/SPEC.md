@@ -408,7 +408,7 @@ the behaviour.
 | `INV-2` | An `initData` with `auth_date` older than `INIT_DATA_MAX_AGE_SECONDS` (86400), or more than 60 seconds in the future (the named constant `InitDataMaxClockSkewSeconds`, not a setting), is rejected | `InitDataValidatorTests` |
 | `INV-3` | Every `/api/orders` and `/api/users` route returns 401 without a valid JWT, and a user can never read or change another user's order (404) | `AccessTests` |
 | `INV-4` | The order's stored rate equals the server-computed rate for the stored inputs; a client-sent `rate` or `amount_receive` property has no effect | `OrderPricingTests` |
-| `INV-5` | With a snapshot older than its source's maximum age, or with an effective date outside the window of section 1.4 or 1.4a, `/api/rate` returns 503 for every direction that needs it and `POST /api/orders` creates nothing | `RateFreshnessTests`, `EcbProviderTests`, `CbrProviderTests` |
+| `INV-5` | With a snapshot older than its source's maximum age, or with an effective date outside the window of section 1.4 or 1.4a, `/api/rate` returns 503 for every direction that needs it and `POST /api/orders` creates nothing | `RateFreshnessTests`, `EcbProviderTests`, `CbrProviderTests`, `RateApiTests` |
 | `INV-6` | Every direction row of section 1.1 is accepted with its fields and rejected without each required field; same-base directions are rejected; every detail field rule of section 1.1 rejects a bad value | `DirectionTests`, `DetailFieldTests` (theory data generated from the tables) |
 | `INV-7` | No log event emitted by the app contains any value from the redaction list or a bot-token, JWT or credentialed-URL pattern, in properties, message or exception | `LogRedactionTests` |
 | `INV-8` | Outside demo mode, the app refuses to start when any required secret is missing, malformed or equals its `.env.example` placeholder, naming the variable and never the value | `SettingsTests` |
@@ -420,7 +420,7 @@ the behaviour.
 | `INV-14` | Money values round-trip through the API and database as exact decimals with their column scale; a JSON number in a money field is refused; `Quantize` matches the hand-computed half-down table; no `double`, `float` or `MidpointRounding.ToZero` appears in `Exchange.Domain` or in any file under `src/Exchange.Api` that declares a `decimal` (source scan) | `MoneyTests`, `QuantizeTests` |
 | `INV-15` | `POST /api/auth/demo` answers only when `APP_ENV=demo`; in every other environment it returns 404 and creates no user | `DemoModeTests` |
 | `INV-16` | With `APP_ENV=demo` the app refuses to start while any production secret of section 1.9 is set or `DATABASE_URL` carries a password; in demo mode nothing is sent to Telegram and no message text is logged | `DemoModeTests` |
-| `INV-17` | Every row of the API table of section 1.10 is served with its method, path, auth requirement, success status, and request and response property names and JSON types | `ApiContractTests` |
+| `INV-17` | Every row of the API table of section 1.10 is served with its method, path, auth requirement, success status, and request and response property names and JSON types | `ApiContractTests`; `DemoModeTests` for demo mode |
 | `INV-18` | The front end loads nothing from outside `telegram.org` (any scheme, `//host`, WebSockets), keeps the token in no browser or Telegram storage (`localStorage`, `sessionStorage`, `indexedDB`, cookies, `CloudStorage`, `DeviceStorage`, `SecureStorage`), and every locale key it uses exists in `ru.json` - a use is a call of the lookup function `t` with a string literal, and a lookup by a computed key carries a `locale-dynamic: <prefix>` comment whose whole key family must exist; each scan fails if it finds no file, and the key scan fails if it finds no key. `GET /` and every file under `/static` are served | `FrontendScanTests` |
 | `INV-19` | No commit in the repository's history adds a bot-token pattern, a JWT, a PEM private key or a file named `.env` (CI checks out the full history) | `NoSecretsInHistoryTests` |
 | `INV-20` | Every `PackageReference` has no version of its own and appears in `Directory.Packages.props`; every resolved `Microsoft.AspNetCore.*` and `Microsoft.EntityFrameworkCore*` package in every project's `project.assets.json` is exactly 10.0.11; the forbidden packages of section 6.2 are absent from the restored graph, except `Newtonsoft.Json` reached only through `Microsoft.EntityFrameworkCore.Design` (design-time, `PrivateAssets=all`); no `Console` output outside `LoggingSetup.cs` | `DependencyContractTests` |
@@ -437,8 +437,8 @@ Fixed; do not substitute. The SDK and runtime are on the owner's machine already
 | SDK | .NET SDK, pinned in `global.json` (`rollForward: latestPatch`) | 10.0.400 |
 | Runtime | ASP.NET Core / .NET (LTS) | 10.0.11 |
 | Web | ASP.NET Core Minimal APIs with route groups; `System.Text.Json` | in-box |
-| Data | PostgreSQL; EF Core with Npgsql; EF Core migrations | PostgreSQL 16 (an exact `postgres:16.x-alpine` tag fixed in `PHASE-0` against Docker Hub and used by compose and Testcontainers alike); `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` 10.0.11, referenced **explicitly** (Npgsql's range `[10.0.4, 11.0.0)` would otherwise resolve 10.0.4 wherever the design package is absent); `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3; `Microsoft.EntityFrameworkCore.Design` 10.0.11 (`PrivateAssets=all`); `dotnet-ef` local tool 10.0.11 |
-| Settings | Options pattern bound from the environment variables of section 1.11, `ValidateOnStart` with hand-written validators | in-box |
+| Data | PostgreSQL; EF Core with Npgsql; EF Core migrations | PostgreSQL 16 (the exact tag `postgres:16.15-alpine`, fixed in `PHASE-1` when the first container arrived (`D-023`) and used by compose and Testcontainers alike); `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` 10.0.11, referenced **explicitly** (Npgsql's range `[10.0.4, 11.0.0)` would otherwise resolve 10.0.4 wherever the design package is absent); `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3; `Microsoft.EntityFrameworkCore.Design` 10.0.11 (`PrivateAssets=all`); `dotnet-ef` local tool 10.0.11 |
+| Settings | One typed settings object loaded and validated once at startup from the environment variables of section 1.11 by a hand-written loader that reports every problem at once (`D-018`; amended 2026-10-08 from the Options pattern with `ValidateOnStart`, approved by the owner) | in-box |
 | HTTP out | `IHttpClientFactory` typed clients; retries hand-written | in-box |
 | Auth | `Microsoft.AspNetCore.Authentication.JwtBearer` - HS256, `JWT_TTL_SECONDS` tokens, re-issued silently from `initData`; `initData` HMAC with `HMACSHA256` and `CryptographicOperations.FixedTimeEquals` | 10.0.11 |
 | Crypto | `System.Security.Cryptography.AesGcm` (PII), `RandomNumberGenerator` (demo keys) | in-box |
@@ -518,6 +518,14 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
 - Gate: `dotnet build --nologo` and `dotnet test --no-build` are green locally and in CI;
   starting with a missing secret exits non-zero with an error naming the variable; `GET /healthz`
   returns 200 and the startup log line shows the version and masked secrets.
+- **Closed 2026-10-08**, approved by the owner. Pull requests #4 (skeleton, `Quantize`, `INV-20`,
+  CI), #5 (settings, `INV-8`, `INV-12`, `INV-19`) and #6 (logging, `INV-7`, the 500 body of
+  `INV-21`), each with a clean-context review and green CI. Gate run on `dev` at `92ff471`: build
+  0 warnings, 251/251 tests; started with no secrets, the app exited 1 with one `FATAL` line
+  naming all seven missing variables and no value; started with every setting, `GET /healthz`
+  answered `200 {"status":"ok"}` and the startup record showed version
+  `0.1.0+92ff471d61276de93799cd43f4f427840a01fdf5` with every credential as `**********`. The
+  owner also approved the amendment of the section 6 Settings row (`D-018`).
 
 ### PHASE-1 - Database and reference data
 
@@ -532,6 +540,16 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   `/api/directions` returns the direction table, each in the shape of section 1.10.
 - Generated migrations are reviewed by hand before they are committed: the pull request quotes
   the SQL of `dotnet ef migrations script` and the reviewer reads it.
+- **Closed 2026-10-09**, approved by the owner. Pull requests #8 (directions in the domain), #9
+  (PII cipher, the money source scan), #10 (schema, migration with the seed, `migrate`; its SQL
+  quoted and reviewed), #11 (reference endpoints, the `INV-17` contract harness), each with a
+  clean-context review and green CI. Gate run on `dev` at `b5fe3cd`: build 0 warnings, 502/502
+  tests; on an empty `postgres:16.15-alpine`, `dotnet run -- migrate` in `src/Exchange.Api` exited
+  0 with one log line, `Database migrated: 1 migration(s) applied 20261008212257_InitialSchema`,
+  and left 6 cities, 5 banks and 3 networks; with one city made inactive, the running app's
+  `GET /api/cities` listed the other five, money as strings at scale 4, and `/api/banks`,
+  `/api/usdt-networks` and `/api/directions` answered 5, 3 and 14 rows in the shape of section
+  1.10.
 
 ### PHASE-2 - Telegram authentication
 
@@ -540,6 +558,16 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   `INV-3`, and `INV-21` for 401.
 - Gate: a real `initData` from the project's own test bot authenticates; a byte-altered copy
   gets 401.
+- **Closed 2026-10-09**, approved by the owner. Pull requests #13 (the `initData` validator,
+  `D-028`), #14 (JWT issue and verification, `POST /api/auth/telegram`, `GET /api/users/me`, the
+  401 of `INV-21`, `INV-3` for `/api/users`, the auth column of `INV-17`, `D-029`), each with a
+  clean-context review and green CI. Gate run on `dev` at `62551c5`: build 0 warnings, 587/587
+  tests; the app in `production` mode with the test bot's token, on an empty
+  `postgres:16.15-alpine`, answered a real `initData` - which carried a `signature` field, signed
+  into its data-check-string as `D-028` assumed - with 200 and a token that `GET /api/users/me`
+  accepted with 200; copies with one byte changed in `auth_date` and in `hash` got 401,
+  `{"error":"unauthorized"}` and `WWW-Authenticate: Bearer`. The app log held no bot token and no
+  JWT, and two `WARNING` records with the reason `bad_signature`.
 
 ### PHASE-3 - Rate engine, ECB and Bank of Russia providers
 
@@ -553,6 +581,20 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   of Russia; with each provider in turn pointed at an unreachable URL, its last snapshot is
   served until its max age, then 503 for exactly the directions that need it, and an `ERROR`
   alert reaches the operator chat.
+- **Closed 2026-10-10**, approved by the owner. Pull requests #16 (the rate engine, `D-030`), #17
+  (the ECB and Bank of Russia providers, `D-031`), #18 (the cache, the freshness guard and the
+  currency routes, `D-032`), #19 (`POST /api/rate` with its 422 and 503 bodies, `D-033`), #20
+  (the detail field rules and `DetailFieldTests`, `D-034`), #21 (alert delivery through the Bot
+  API, `D-035`) and #22 (alert text, `D-036`), each with a clean-context review and green CI.
+  Gate run on `dev` at `7e958a8`, 1020/1020 tests, the app in `production` mode on an empty
+  `postgres:16.15-alpine`: a live quote answered 200 for each of the 14 directions, `provider`
+  `cbr+ecb` for the `RUB_WIRE` ones and `ecb` for the rest; then, with each source served once by
+  a local proxy and the proxy stopped (connection refused) under a 5-second cache and a 25-second
+  maximum age, the last snapshot was still served within the maximum age, after it the ECB outage
+  refused all 14 directions with 503 and the Bank of Russia outage exactly the 5 `RUB_WIRE` ones
+  while the other 9 answered 200, each failure was logged at `ERROR` with its provider as the
+  alert key, and the alerts reached the operator chat, which the owner confirmed; no alert
+  delivery failed, and the logs held no bot token and no JWT.
 
 ### PHASE-4 - Orders and operator bot (key milestone)
 
@@ -565,6 +607,20 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
 - Gate: an order placed via the API appears in the operator chat; pressing Confirm, then
   Processing, then Complete (the buttons offer only the transitions of section 1.5) updates the
   order and messages the client each time; a press from a non-operator account changes nothing.
+- **Closed 2026-10-10**, approved by the owner. Pull requests #24 (the status machine, `D-037`),
+  #25 (placing and reading orders, `D-038`), #26 (the transition function and the client's
+  cancel, `D-039`), #27 (the bot's messages and their delivery, `D-040`), #28 (operator buttons,
+  the bot webhook and the development poller, `D-041`) and #29 (review follow-ups), each with a
+  clean-context review and green CI. Gate run on `dev` at `2dc12c4`, 1313/1313 tests, the app in
+  `test` mode with the poller on an empty `postgres:16.15-alpine`, the owner's account as the
+  client and the operator chat. With a stranger's id as the only operator, an order placed via
+  the API answered 201 `PENDING` and its message with buttons reached the operator chat; the
+  owner pressed Confirm, the bot answered that the press is not allowed, the order stayed
+  `PENDING` with one history row, and the refusal was logged as `not_an_operator`. Restarted with
+  the owner as the operator, the owner pressed Confirm, Processing and Complete: the order ended
+  `COMPLETED` with `closed_at` set, the history held `PENDING` by `system` and the three moves by
+  `operator`, three client and three operator messages were sent with no delivery failure, and
+  the logs held no bot token and no JWT.
 
 ### PHASE-5 - Mini App front end and demo mode
 
@@ -575,6 +631,18 @@ Dockerfile  docker-compose.yml  .dockerignore  .env.example
   menu button pointed at it), a full order is placed for `RUB_WIRE -> EUR_CASH` and
   `USDT -> EUR_ATM`, and the history shows both; with `APP_ENV=demo` the same two orders are
   placed in a desktop browser.
+- **Closed 2026-10-13**, approved by the owner. Pull requests #31 (the demo sign-in and
+  `DemoModeTests`, `D-042`), #32 (the front end, its serving, `FrontendScanTests` and
+  `WebRootTests`, `D-043`) and #33 (review follow-ups), each with a clean-context review and green
+  CI. Gate run on `dev` at `21702d5`, 1364/1364 tests. Inside Telegram on the owner's phone, with
+  the app in `test` mode behind a `cloudflared` quick tunnel and the bot's menu button pointed at
+  it, the owner placed `RUB_WIRE -> EUR_CASH` and `USDT -> EUR_ATM` orders, both shown in the
+  history, and cancelled another order from the history; every operator message was delivered,
+  the cancel sent its client and operator status messages, no delivery failed, and the logs held
+  no `ERROR`, no bot token and no JWT. With `APP_ENV=demo` on an empty database, the same two
+  orders were placed in a desktop browser and shown in the profile, behind the demo banner;
+  nothing was sent to Telegram, each message was logged as suppressed, and the log held no IBAN
+  or recipient name. The tunnel, the app and the database were stopped after the gate.
 
 ### PHASE-6 - Loyalty and admin panel (deferred)
 
@@ -593,12 +661,22 @@ Deferred; not part of v1 (`L-3`). Kept so that the scope stays visible.
   portfolio README in English with screenshots, the rate sources named and the limitations
   table; the publication checklist for the owner.
 - Deliverables: `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `README.md`,
-  `docs/screenshots/`; `INV-19` green on the full history.
+  `docs/screenshots/`, the checklist `docs/PUBLISHING.md`; `INV-19` green on the full history.
 - Gate: on a clean clone, `docker compose up` alone starts the demo; in a desktop browser at
   `http://localhost:8000` an order is placed for `RUB_WIRE -> EUR_CASH` and `USDT -> EUR_ATM` at
   live ECB and Bank of Russia rates and the history shows both; a second `docker compose up`
   starts with an empty history; the owner has read the README. Then the owner releases `dev`
   into `main` and makes the repository public - both are hers (`RULE-GIT`).
+- **Closed 2026-10-13**, approved by the owner. Pull requests #35 (the demo image and compose
+  file, `D-044`) and #36 (the portfolio README, the screenshots and the publication checklist),
+  each with a clean-context review and green CI. Gate run on `dev` at `83edbd1`, 1377/1377 tests.
+  The agent ran it first on a fresh clone with no `.env`: `docker compose up` alone started the
+  demo, with no warning in the app's log; both orders were placed through the API at live rates,
+  and after a restart the history was empty. The owner then ran it on a clean clone: in a desktop
+  browser at `http://localhost:8000` she placed `RUB_WIRE -> EUR_CASH` and `USDT -> EUR_ATM`
+  orders at live ECB and Bank of Russia rates, the history showed both, and after a restart the
+  history was empty. The owner read the README and the checklist. Releasing `dev` into `main` and making the repository
+  public remain the owner's, by `docs/PUBLISHING.md`.
 
 ---
 

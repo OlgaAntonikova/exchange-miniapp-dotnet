@@ -13,7 +13,9 @@ TestResults/
 # Logs (spec 4: the rolling file is development-only)
 logs/
 
-# IDE and OS
+# IDE and OS. launchSettings.json is written by Visual Studio for each developer; the app reads
+# APP_ENV, not the ASPNETCORE_ENVIRONMENT it sets (spec 1.11).
+**/Properties/launchSettings.json
 .vs/
 .vscode/
 .idea/
