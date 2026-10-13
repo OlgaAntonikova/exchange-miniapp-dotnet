@@ -11,6 +11,9 @@
 **/bin
 **/obj
 **/TestResults
+artifacts
+*.binlog
+*.user
 **/Properties/launchSettings.json
 logs
 *.pem
