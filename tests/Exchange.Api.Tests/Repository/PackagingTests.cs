@@ -33,6 +33,17 @@ public sealed class PackagingTests
     }
 
     [Fact]
+    public void The_runtime_images_default_port_setting_is_cleared()
+    {
+        // The app listens on its own fixed port; the image's ASPNETCORE_HTTP_PORTS would only make
+        // Kestrel warn at every start (D-044).
+        var lines = Lines("Dockerfile");
+        var runtime = lines.FindIndex(line => line.StartsWith("FROM mcr.microsoft.com/dotnet/aspnet:", StringComparison.Ordinal));
+
+        lines.Skip(runtime).ShouldContain("ENV ASPNETCORE_HTTP_PORTS=");
+    }
+
+    [Fact]
     public void The_compose_database_is_the_tested_image_keeps_nothing_and_publishes_no_port()
     {
         var db = Service("db");

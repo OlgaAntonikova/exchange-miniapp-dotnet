@@ -661,7 +661,7 @@ Deferred; not part of v1 (`L-3`). Kept so that the scope stays visible.
   portfolio README in English with screenshots, the rate sources named and the limitations
   table; the publication checklist for the owner.
 - Deliverables: `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `README.md`,
-  `docs/screenshots/`; `INV-19` green on the full history.
+  `docs/screenshots/`, the checklist `docs/PUBLISHING.md`; `INV-19` green on the full history.
 - Gate: on a clean clone, `docker compose up` alone starts the demo; in a desktop browser at
   `http://localhost:8000` an order is placed for `RUB_WIRE -> EUR_CASH` and `USDT -> EUR_ATM` at
   live ECB and Bank of Russia rates and the history shows both; a second `docker compose up`

@@ -14,7 +14,8 @@ COPY src/Exchange.Api/Exchange.Api.csproj src/Exchange.Api/
 RUN dotnet restore src/Exchange.Api/Exchange.Api.csproj
 
 COPY src/ src/
-RUN dotnet publish src/Exchange.Api/Exchange.Api.csproj --configuration Release --no-restore --output /app
+# No debug symbols in the runtime image.
+RUN dotnet publish src/Exchange.Api/Exchange.Api.csproj --configuration Release --no-restore --output /app -p:DebugType=none
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.11 AS runtime
 WORKDIR /app
