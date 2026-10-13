@@ -40,6 +40,13 @@ public static class LoggingSetup
     /// </summary>
     public static readonly IReadOnlyList<string> DroppedProperties = ["RequestPath", "RequestId"];
 
+    /// <summary>
+    /// ASP.NET Core's data protection, raised to <c>Error</c>: the authentication setup registers it,
+    /// but nothing the app keeps is protected with it (the tokens are JWTs under <c>JWT_SECRET</c>),
+    /// so its warnings about an unpersisted, unencrypted key ring in a container are noise (D-044).
+    /// </summary>
+    public const string DataProtectionCategory = "Microsoft.AspNetCore.DataProtection";
+
     /// <summary>The formatter for a log format: JSON lines or the console template.</summary>
     public static ITextFormatter CreateFormatter(LogFormat format) =>
         format == LogFormat.Json
@@ -64,6 +71,7 @@ public static class LoggingSetup
         }
 
         configuration.MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information);
+        configuration.MinimumLevel.Override(DataProtectionCategory, LogEventLevel.Error);
         ILogEventSink[] outputs = alerts is null ? [output] : [output, alerts];
         return configuration.WriteTo.Sink(new RedactingSink(outputs));
     }
